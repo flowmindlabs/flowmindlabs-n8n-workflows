@@ -86,11 +86,11 @@ Transform your operations with intelligent automation workflows that deliver mea
 ⚠️ **Important:** Most AI APIs have free tier limits. Review [OpenAI pricing](https://platform.openai.com/pricing) and model token limits before testing.
 
 
-*For detailed n8n setup instructions, visit the [official n8n documentation](https://docs.n8n.io). Our focus is on custom business implementations.*
-Github: [Github](https://github.com/n8n-io/n8n)
-n8n Community - [Community forum and support](https://community.n8n.io/)
-Workflow Templates - [Official template library](https://n8n.io/workflows/)
-Integration Docs - [Service-specific guides](https://docs.n8n.io/integrations/)
+*For detailed n8n setup instructions, visit the [official n8n documentation](https://docs.n8n.io). Our focus is on custom business implementations.*<br>
+Github: [Github](https://github.com/n8n-io/n8n)<br>
+n8n Community - [Community forum and support](https://community.n8n.io/)<br>
+Workflow Templates - [Official template library](https://n8n.io/workflows/)<br>
+Integration Docs - [Service-specific guides](https://docs.n8n.io/integrations/)<br>
 
 ## 📊 Each Workflow Includes
 
