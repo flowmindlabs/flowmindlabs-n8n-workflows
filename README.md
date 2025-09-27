@@ -30,7 +30,7 @@ Transform your operations with intelligent automation workflows that deliver mea
 *These workflows showcase our capabilities. Every business is different—that's why we provide custom implementations.*
 
 ### ✅ Simple Tier (Foundation Examples)
-- [**Content Quality Gate**](workflows/01-simple/content-quality-gate/) - AI-powered content evaluation and approval
+- [**Content Quality Gate**](workflows/Contentqualitygate/) - AI-powered content evaluation and approval
 - [**AI Lead Scorer**](workflows/01-simple/ai-lead-scorer/) - Intelligent prospect qualification
 - [**Smart Email Responder**](workflows/01-simple/smart-email-responder/) - Context-aware email automation
 
