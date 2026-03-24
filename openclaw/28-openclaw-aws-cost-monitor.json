@@ -1,0 +1,143 @@
+{
+  "name": "28 - AWS Cost Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 28 - AWS Cost Monitor\n\n**What it does:**\n- Runs every Monday morning\n- Calls AWS Cost Explorer API for last 7 days spend\n- Claude formats a cost summary with trends and anomalies\n- Posts to Slack and optionally delivers via OpenClaw\n\n**Setup:**\n1. Set environment variables:\n   - `AWS_ACCESS_KEY_ID` — IAM user with Cost Explorer read-only\n   - `AWS_SECRET_ACCESS_KEY` — IAM secret\n   - `AWS_REGION` — e.g. ap-south-1\n   - `SLACK_WEBHOOK_URL` — for team alerts\n   - `OPENCLAW_WEBHOOK_URL` + `OPENCLAW_GATEWAY_TOKEN` (optional)\n2. IAM policy needed: `ce:GetCostAndUsage` only (read-only)\n3. Set COST_ALERT_THRESHOLD in Config node (default: ₹5000/week)\n\n**Security:** Use a dedicated read-only IAM user. Never give this key any write permissions.",
+        "height": 400,
+        "width": 380
+      },
+      "id": "b3000003-0003-0003-0003-000000000001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, -180]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 9 * * 1" }]
+        }
+      },
+      "id": "b3000003-0003-0003-0003-000000000002",
+      "name": "Every Monday 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c001", "name": "COST_ALERT_THRESHOLD", "value": 5000, "type": "number" },
+            { "id": "c002", "name": "CURRENCY", "value": "USD", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b3000003-0003-0003-0003-000000000003",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate last 7 days date range\nconst today = new Date();\nconst end = today.toISOString().split('T')[0];\nconst start = new Date(today.setDate(today.getDate() - 7)).toISOString().split('T')[0];\nconst lastMonth = new Date();\nlastMonth.setMonth(lastMonth.getMonth() - 1);\nconst monthStart = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1).toISOString().split('T')[0];\nconst monthEnd = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0).toISOString().split('T')[0];\n\nreturn [{ json: { week_start: start, week_end: end, month_start: monthStart, month_end: monthEnd } }];"
+      },
+      "id": "b3000003-0003-0003-0003-000000000004",
+      "name": "Build Date Range",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://ce.{{ $env.AWS_REGION }}.amazonaws.com/GetCostAndUsage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "aws",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/x-amz-json-1.1" },
+            { "name": "X-Amz-Target", "value": "AWSInsightsIndexService.GetCostAndUsage" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"TimePeriod\": {\n    \"Start\": \"{{ $json.week_start }}\",\n    \"End\": \"{{ $json.week_end }}\"\n  },\n  \"Granularity\": \"DAILY\",\n  \"Metrics\": [\"BlendedCost\"],\n  \"GroupBy\": [{ \"Type\": \"DIMENSION\", \"Key\": \"SERVICE\" }]\n}",
+        "options": {}
+      },
+      "id": "b3000003-0003-0003-0003-000000000005",
+      "name": "AWS Cost Explorer API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.item.json.ResultsByTime || [];\nconst threshold = $('Config').item.json.COST_ALERT_THRESHOLD;\n\n// Aggregate by service\nconst serviceMap = {};\nlet totalCost = 0;\n\nresults.forEach(day => {\n  (day.Groups || []).forEach(g => {\n    const service = g.Keys?.[0] || 'Other';\n    const cost = parseFloat(g.Metrics?.BlendedCost?.Amount || '0');\n    serviceMap[service] = (serviceMap[service] || 0) + cost;\n    totalCost += cost;\n  });\n});\n\n// Sort by cost descending\nconst sorted = Object.entries(serviceMap)\n  .sort((a, b) => b[1] - a[1])\n  .slice(0, 8)\n  .map(([svc, cost]) => `${svc}: $${cost.toFixed(2)}`);\n\nconst weekStart = $('Build Date Range').item.json.week_start;\nconst weekEnd = $('Build Date Range').item.json.week_end;\n\nreturn [{ json: {\n  total_cost: totalCost.toFixed(2),\n  services_breakdown: sorted.join('\\n'),\n  week_start: weekStart,\n  week_end: weekEnd,\n  exceeds_threshold: totalCost > threshold,\n  threshold\n}}];"
+      },
+      "id": "b3000003-0003-0003-0003-000000000006",
+      "name": "Process Cost Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "HTTP-Referer", "value": "flowmindlabs.co" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"anthropic/claude-sonnet-4-6\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an AWS cost analyst. Summarise this week's AWS spend in 3-4 sentences. Highlight the biggest cost driver, flag anything unusual, and give one cost optimisation tip. Be concise and practical.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"AWS spend {{ $json.week_start }} to {{ $json.week_end }}:\\nTotal: ${{ $json.total_cost }}\\n\\nBy service:\\n{{ $json.services_breakdown }}\\n\\n{{ $json.exceeds_threshold ? 'ALERT: Spend exceeded threshold of $' + $json.threshold : 'Within budget' }}\"\n    }\n  ],\n  \"max_tokens\": 300\n}",
+        "options": {}
+      },
+      "id": "b3000003-0003-0003-0003-000000000007",
+      "name": "Claude — Cost Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": { \"type\": \"plain_text\", \"text\": \"AWS Weekly Cost Report{{ $('Process Cost Data').item.json.exceeds_threshold ? ' — OVER BUDGET' : '' }}\", \"emoji\": true }\n    },\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        { \"type\": \"mrkdwn\", \"text\": \"*Period:*\\n{{ $('Process Cost Data').item.json.week_start }} to {{ $('Process Cost Data').item.json.week_end }}\" },\n        { \"type\": \"mrkdwn\", \"text\": \"*Total Spend:*\\n${{ $('Process Cost Data').item.json.total_cost }}\" }\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"text\": { \"type\": \"mrkdwn\", \"text\": \"{{ $json.choices[0].message.content }}\" }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Top Services:*\\n{{ $('Process Cost Data').item.json.services_breakdown }}\" }\n    },\n    {\n      \"type\": \"context\",\n      \"elements\": [{ \"type\": \"mrkdwn\", \"text\": \"AWS Cost Monitor • FlowMind Labs\" }]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "b3000003-0003-0003-0003-000000000008",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 300]
+    }
+  ],
+  "connections": {
+    "Every Monday 9AM": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Build Date Range", "type": "main", "index": 0 }]] },
+    "Build Date Range": { "main": [[{ "node": "AWS Cost Explorer API", "type": "main", "index": 0 }]] },
+    "AWS Cost Explorer API": { "main": [[{ "node": "Process Cost Data", "type": "main", "index": 0 }]] },
+    "Process Cost Data": { "main": [[{ "node": "Claude — Cost Analysis", "type": "main", "index": 0 }]] },
+    "Claude — Cost Analysis": { "main": [[{ "node": "Post to Slack", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "createdAt": "2026-03-24T00:00:00.000Z", "updatedAt": "2026-03-24T00:00:00.000Z", "id": "tag-devops", "name": "devops" }],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-24T00:00:00.000Z",
+  "versionId": "v1"
+}
