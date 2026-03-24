@@ -1,0 +1,211 @@
+{
+  "name": "Call Center — Support Ticket AI Triage",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 🎫 Support Ticket AI Triage\n\n**What this workflow does:**\nReceives new support tickets via webhook (from Zendesk, Freshdesk, Intercom, or email). Claude classifies priority, department, and sentiment, then routes to the right team with a suggested response.\n\n**Setup steps:**\n1. Connect your helpdesk webhook to this workflow URL\n2. Add Claude API credentials\n3. Set your routing destinations (Slack channels, email, etc.) in the Route node\n4. Optionally connect back to Zendesk/Freshdesk API to auto-tag tickets\n\n**Supported helpdesk formats:**\n- Zendesk webhook (ticket.created)\n- Freshdesk webhook\n- Raw email via n8n Email Trigger\n- Any JSON POST with subject + body fields",
+        "height": 360,
+        "width": 440,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -220]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ticket-triage",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "New Support Ticket",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 80],
+      "webhookId": "ticket-triage"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "t1",
+              "name": "ticket_id",
+              "value": "={{ $json.body?.id || $json.body?.ticket?.id || $json.body?.ticket_id || 'UNKNOWN' }}",
+              "type": "string"
+            },
+            {
+              "id": "t2",
+              "name": "subject",
+              "value": "={{ $json.body?.subject || $json.body?.ticket?.subject || $json.body?.title || 'No Subject' }}",
+              "type": "string"
+            },
+            {
+              "id": "t3",
+              "name": "body",
+              "value": "={{ $json.body?.description || $json.body?.body || $json.body?.ticket?.description || 'No body' }}",
+              "type": "string"
+            },
+            {
+              "id": "t4",
+              "name": "customer_email",
+              "value": "={{ $json.body?.email || $json.body?.requester?.email || $json.body?.from || 'unknown@example.com' }}",
+              "type": "string"
+            },
+            {
+              "id": "t5",
+              "name": "customer_name",
+              "value": "={{ $json.body?.name || $json.body?.requester?.name || 'Customer' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Normalize Ticket Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 1024,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"You are a support ticket classification expert. Analyze this ticket and return a JSON classification.\\n\\nTicket Subject: {{ $json.subject }}\\nTicket Body: {{ $json.body }}\\nCustomer: {{ $json.customer_name }} ({{ $json.customer_email }})\\n\\nClassify and return JSON with these exact fields:\\n{\\n  \\\"priority\\\": \\\"P1|P2|P3|P4\\\",\\n  \\\"priority_reason\\\": \\\"one sentence why\\\",\\n  \\\"category\\\": \\\"billing|technical|account|general|bug|feature-request\\\",\\n  \\\"department\\\": \\\"engineering|billing|account-management|customer-success\\\",\\n  \\\"sentiment\\\": \\\"angry|frustrated|neutral|happy\\\",\\n  \\\"urgency_score\\\": 0-10,\\n  \\\"suggested_response\\\": \\\"A professional 2-3 sentence first response to this customer\\\",\\n  \\\"tags\\\": [\\\"tag1\\\", \\\"tag2\\\"]\\n}\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Claude Classifies Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json.content[0].text;\nlet classification;\ntry {\n  classification = JSON.parse(raw);\n} catch (e) {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  try { classification = JSON.parse(match[0]); } catch { classification = { priority: 'P3', category: 'general', department: 'customer-success', sentiment: 'neutral', urgency_score: 5, suggested_response: 'Thank you for contacting us. We will look into this shortly.', tags: [] }; }\n}\n\nconst ticket = $('Normalize Ticket Fields').first().json;\nreturn [{ json: { ...classification, ticket_id: ticket.ticket_id, subject: ticket.subject, customer_email: ticket.customer_email, customer_name: ticket.customer_name } }];"
+      },
+      "id": "code-001",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 80]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"id": "r1", "leftValue": "={{ $json.priority }}", "rightValue": "P1", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "P1 Critical"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"id": "r2", "leftValue": "={{ $json.department }}", "rightValue": "engineering", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Engineering"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"id": "r3", "leftValue": "={{ $json.department }}", "rightValue": "billing", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Billing"
+            }
+          ]
+        },
+        "options": {"fallbackOutput": "extra"}
+      },
+      "id": "switch-001",
+      "name": "Route by Department",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [960, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🎫 New {{ $json.priority }} Ticket: {{ $json.subject }}\",\n  \"blocks\": [\n    {\"type\": \"header\", \"text\": {\"type\": \"plain_text\", \"text\": \"🎫 Ticket #{{ $json.ticket_id }} — {{ $json.priority }}\"}},\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\"type\": \"mrkdwn\", \"text\": \"*Customer:*\\n{{ $json.customer_name }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Priority:*\\n{{ $json.priority }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Category:*\\n{{ $json.category }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Sentiment:*\\n{{ $json.sentiment }}\"}\n      ]\n    },\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Subject:*\\n{{ $json.subject }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Suggested Response:*\\n{{ $json.suggested_response }}\"}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "Notify Team via Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({received: true, ticket_id: $('Parse Classification').item.json.ticket_id, priority: $('Parse Classification').item.json.priority}) }}",
+        "options": {}
+      },
+      "id": "respond-001",
+      "name": "Acknowledge Ticket",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1400, 80]
+    }
+  ],
+  "connections": {
+    "New Support Ticket": {
+      "main": [[{"node": "Normalize Ticket Fields", "type": "main", "index": 0}]]
+    },
+    "Normalize Ticket Fields": {
+      "main": [[{"node": "Claude Classifies Ticket", "type": "main", "index": 0}]]
+    },
+    "Claude Classifies Ticket": {
+      "main": [[{"node": "Parse Classification", "type": "main", "index": 0}]]
+    },
+    "Parse Classification": {
+      "main": [[{"node": "Route by Department", "type": "main", "index": 0}]]
+    },
+    "Route by Department": {
+      "main": [
+        [{"node": "Notify Team via Slack", "type": "main", "index": 0}],
+        [{"node": "Notify Team via Slack", "type": "main", "index": 0}],
+        [{"node": "Notify Team via Slack", "type": "main", "index": 0}],
+        [{"node": "Notify Team via Slack", "type": "main", "index": 0}]
+      ]
+    },
+    "Notify Team via Slack": {
+      "main": [[{"node": "Acknowledge Ticket", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "call-center"}, {"name": "support"}, {"name": "flowmindlabs"}]
+}
