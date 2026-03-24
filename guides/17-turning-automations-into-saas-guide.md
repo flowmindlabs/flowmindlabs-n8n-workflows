@@ -257,4 +257,4 @@ Import `17-automation-saas-dashboard.json` for the full tracking workflow.
 ---
 
 *Built by FlowMind Labs — We build AI automation that works.*
-*Website: flowmindlabs.com | GitHub: github.com/flowmindlabs*
+*Website: flowmindlabs.co | GitHub: github.com/flowmindlabs | Email: contact@flowmindlabs.co*
