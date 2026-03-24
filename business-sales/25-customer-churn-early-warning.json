@@ -1,0 +1,178 @@
+{
+  "name": "25 - Customer Churn Early Warning System",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 25 - Customer Churn Early Warning System\n\n**What it does:**\n- Runs weekly, pulls customer data from CRM + usage metrics\n- Claude scores each customer's churn risk (0-100)\n- Posts prioritised at-risk customer list to Slack for CS team\n- Flags accounts needing urgent attention this week\n\n**Setup:**\n1. Configure HubSpot credentials (or swap to your CRM)\n2. Set SLACK_WEBHOOK_URL environment variable\n3. Configure OpenRouter/Claude credentials\n4. Add a webhook or spreadsheet with usage data (logins, feature usage)\n5. Adjust CHURN_RISK_THRESHOLD in Config node (default: 60)\n\n**Data the workflow uses:**\n- Days since last login\n- Support tickets opened this month\n- Contract renewal date\n- Plan/tier\n- Usage trend (up/down/flat)",
+        "height": 400,
+        "width": 380
+      },
+      "id": "a5000005-0005-0005-0005-000000000001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, -180]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 9 * * 1" }]
+        }
+      },
+      "id": "a5000005-0005-0005-0005-000000000002",
+      "name": "Every Monday 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c001", "name": "CHURN_RISK_THRESHOLD", "value": 60, "type": "number" },
+            { "id": "c002", "name": "RENEWAL_WARNING_DAYS", "value": 30, "type": "number" },
+            { "id": "c003", "name": "MAX_CUSTOMERS_TO_ANALYSE", "value": 50, "type": "number" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a5000005-0005-0005-0005-000000000003",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "getAll",
+        "limit": 50,
+        "additionalFields": {
+          "properties": "firstname,lastname,email,company,hs_last_sales_activity_date,num_notes,hs_analytics_num_visits,closedate,hubspot_owner_id"
+        },
+        "options": {}
+      },
+      "id": "a5000005-0005-0005-0005-000000000004",
+      "name": "Fetch Customers from HubSpot",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [720, 300],
+      "credentials": {
+        "hubspotAppToken": { "id": "hubspot-cred", "name": "HubSpot" }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const customers = $input.all().map(i => i.json);\nconst now = new Date();\n\n// Enrich each customer with churn signals\nreturn customers.map(c => {\n  const props = c.properties || c;\n  const lastActivity = props.hs_last_sales_activity_date ? new Date(props.hs_last_sales_activity_date) : null;\n  const daysSinceActivity = lastActivity ? Math.floor((now - lastActivity) / 86400000) : 999;\n  const closeDate = props.closedate ? new Date(props.closedate) : null;\n  const daysToRenewal = closeDate ? Math.floor((closeDate - now) / 86400000) : 999;\n  const pageViews = parseInt(props.hs_analytics_num_visits || '0', 10);\n\n  return { json: {\n    customer_id: c.id || props.hs_object_id,\n    name: `${props.firstname || ''} ${props.lastname || ''}`.trim() || 'Unknown',\n    email: props.email || '',\n    company: props.company || 'Unknown',\n    days_since_activity: daysSinceActivity,\n    days_to_renewal: daysToRenewal,\n    page_views: pageViews,\n    support_tickets: parseInt(props.num_notes || '0', 10),\n    renewal_soon: daysToRenewal <= 30 && daysToRenewal > 0\n  }};\n}).map(i => i);"
+      },
+      "id": "a5000005-0005-0005-0005-000000000005",
+      "name": "Enrich with Churn Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "HTTP-Referer", "value": "flowmindlabs.co" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"anthropic/claude-sonnet-4-6\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a customer success analyst. Score this customer's churn risk from 0-100 (100 = certain to churn). Return ONLY valid JSON: {\\\"churn_score\\\": 75, \\\"reason\\\": \\\"brief reason\\\", \\\"action\\\": \\\"recommended action for CS team\\\"}.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Customer: {{ $json.name }} at {{ $json.company }}\\nDays since last activity: {{ $json.days_since_activity }}\\nDays to renewal: {{ $json.days_to_renewal === 999 ? 'Unknown' : $json.days_to_renewal }}\\nPage views this month: {{ $json.page_views }}\\nSupport tickets: {{ $json.support_tickets }}\"\n    }\n  ],\n  \"max_tokens\": 150\n}",
+        "options": {}
+      },
+      "id": "a5000005-0005-0005-0005-000000000006",
+      "name": "Claude — Score Churn Risk",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.item.json.choices?.[0]?.message?.content || '{}';\nlet parsed;\ntry {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(match ? match[0] : raw);\n} catch(e) {\n  parsed = { churn_score: 50, reason: 'Unable to parse', action: 'Manual review needed' };\n}\n\nconst customer = $('Enrich with Churn Signals').item.json;\n\nreturn [{ json: {\n  ...customer,\n  churn_score: parsed.churn_score || 50,\n  churn_reason: parsed.reason || '',\n  recommended_action: parsed.action || '',\n  is_high_risk: (parsed.churn_score || 50) >= $('Config').item.json.CHURN_RISK_THRESHOLD\n}}];"
+      },
+      "id": "a5000005-0005-0005-0005-000000000007",
+      "name": "Parse Risk Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "r001",
+              "leftValue": "={{ $json.is_high_risk }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a5000005-0005-0005-0005-000000000008",
+      "name": "High Risk?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate all high-risk customers and post summary to Slack\nconst atRisk = $input.all().map(i => i.json);\natRisk.sort((a, b) => b.churn_score - a.churn_score);\n\nif (atRisk.length === 0) {\n  return [{ json: { slack_message: 'No high-risk customers this week. All accounts look healthy.', count: 0 } }];\n}\n\nconst lines = atRisk.slice(0, 10).map((c, i) => \n  `${i+1}. *${c.company}* (${c.name}) — Risk: ${c.churn_score}/100${c.renewal_soon ? ' :warning: Renewal soon' : ''}\\n   Reason: ${c.churn_reason}\\n   Action: ${c.recommended_action}`\n).join('\\n\\n');\n\nreturn [{ json: {\n  slack_message: lines,\n  count: atRisk.length,\n  top_risk: atRisk[0]?.company || 'N/A'\n}}];"
+      },
+      "id": "a5000005-0005-0005-0005-000000000009",
+      "name": "Build At-Risk Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1920, 160]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": { \"type\": \"plain_text\", \"text\": \"Weekly Churn Risk Report — {{ $json.count }} At-Risk Accounts\", \"emoji\": true }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Top at-risk customers this week (score >= 60/100):*\" }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": { \"type\": \"mrkdwn\", \"text\": \"{{ $json.slack_message }}\" }\n    },\n    {\n      \"type\": \"context\",\n      \"elements\": [{ \"type\": \"mrkdwn\", \"text\": \"Customer Success • Churn Early Warning • FlowMind Labs\" }]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "a5000005-0005-0005-0005-000000000010",
+      "name": "Post At-Risk Report to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2160, 160]
+    }
+  ],
+  "connections": {
+    "Every Monday 9AM": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Fetch Customers from HubSpot", "type": "main", "index": 0 }]] },
+    "Fetch Customers from HubSpot": { "main": [[{ "node": "Enrich with Churn Signals", "type": "main", "index": 0 }]] },
+    "Enrich with Churn Signals": { "main": [[{ "node": "Claude — Score Churn Risk", "type": "main", "index": 0 }]] },
+    "Claude — Score Churn Risk": { "main": [[{ "node": "Parse Risk Score", "type": "main", "index": 0 }]] },
+    "Parse Risk Score": { "main": [[{ "node": "High Risk?", "type": "main", "index": 0 }]] },
+    "High Risk?": {
+      "main": [
+        [{ "node": "Build At-Risk Summary", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Build At-Risk Summary": { "main": [[{ "node": "Post At-Risk Report to Slack", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "createdAt": "2026-03-24T00:00:00.000Z", "updatedAt": "2026-03-24T00:00:00.000Z", "id": "tag-cs", "name": "customer-success" }],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-24T00:00:00.000Z",
+  "versionId": "v1"
+}
