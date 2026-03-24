@@ -52,6 +52,7 @@
 |---|----------|-------------|
 | 11 | [Social Post Generator](content/11-ai-social-post-generator.json) | One topic → optimized posts for LinkedIn, Twitter/X, and Instagram simultaneously |
 | 12 | [Newsletter Digest Builder](content/12-newsletter-digest-builder.json) | Weekly cron: fetches RSS feeds, Claude curates top stories, builds newsletter |
+| 13 | [Content Quality Gate](content/13-content-quality-gate.json) | AI scores content 0–100 across grammar, brand voice, audience fit, and CTA — HTML report by email |
 
 ### 🦞 OpenClaw Integrations
 
