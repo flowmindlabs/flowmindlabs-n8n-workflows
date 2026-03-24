@@ -2,7 +2,7 @@
 
 **Production-ready AI automation workflows built by [FlowMind Labs](https://flowmindlabs.com)**
 
-> 21 high-value workflows across AI Ops, Call Center, Business, Content, and OpenClaw — all powered by Claude AI.
+> 26 high-value workflows across AI Ops, Call Center, Business, Content, and OpenClaw — all powered by Claude AI.
 
 ---
 
@@ -48,6 +48,11 @@
 | 18 | [E-commerce Order Processing](business-sales/18-ecommerce-order-processing.json) | Shopify order webhook → Airtable inventory sync → customer Gmail confirmation |
 | 19 | [RAG Company Docs Chatbot](business-sales/19-rag-company-docs-chatbot.json) | Google Drive docs → Pinecone vector index → Slack Q&A bot powered by Claude |
 | 20 | [Invoice Generator & Reminder](business-sales/20-invoice-reminder.json) | Daily Stripe overdue check → email reminders → Slack escalation after 2nd reminder |
+| 21 | [AI Job Application Tracker](business-sales/21-ai-job-application-tracker.json) | Gmail watches job replies, Claude classifies status, Airtable tracker auto-updated, follow-up draft after 7 days silence |
+| 22 | [Meeting Overload Detector](business-sales/22-meeting-overload-detector.json) | Weekly Google Calendar scan → Claude analyses focus time & back-to-backs → Slack calendar health report |
+| 23 | [Vendor Price Change Monitor](business-sales/23-vendor-price-monitor.json) | Tracks supplier prices in Airtable, Claude flags >5% changes with cost impact analysis → Slack procurement alert |
+| 24 | [AI Onboarding Buddy](business-sales/24-ai-onboarding-buddy.json) | New hire webhook → Claude generates role-personalised 10-day message sequence → daily Slack DMs automatically |
+| 25 | [Customer Churn Early Warning](business-sales/25-customer-churn-early-warning.json) | Weekly HubSpot pull → Claude scores each customer's churn risk → prioritised at-risk list posted to Slack |
 
 ### 📱 Content / Marketing
 
