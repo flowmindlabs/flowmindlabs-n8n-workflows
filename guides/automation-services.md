@@ -110,12 +110,12 @@ Monthly plans can be cancelled anytime with 7 days notice.
 
 Ready to automate the repetitive parts of your business?
 
-📧 **Email us:** contact@flowmindlabs.co
-🌐 **Website:** flowmindlabs.co
-💬 **WhatsApp:** Available on request after initial contact
+📧 **Email us:** contact.flowmindlabs@gmail.com
+🌐 **Website:** flowmindlabs.co (coming soon)
 
 We respond within 4 business hours.
 
 ---
 
 *FlowMind Labs — AI Automation for Growing Indian Businesses*
+*contact.flowmindlabs@gmail.com*
