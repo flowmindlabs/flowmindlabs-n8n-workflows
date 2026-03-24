@@ -1,0 +1,196 @@
+{
+  "name": "23 - Vendor Price Change Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 23 - Vendor Price Change Monitor\n\n**What it does:**\n- Receives vendor price data via webhook (from email parser, supplier portal, or manual trigger)\n- Compares to last known price stored in Airtable\n- Claude calculates cost impact and flags changes >5%\n- Alerts procurement team on Slack with impact analysis\n\n**Setup:**\n1. Configure Airtable credentials + set AIRTABLE_BASE_ID\n2. Set SLACK_WEBHOOK_URL environment variable\n3. Create Airtable table `Vendor Prices` with columns:\n   - Vendor Name (text)\n   - Item/SKU (text)\n   - Last Known Price (number)\n   - Current Price (number)\n   - Currency (text)\n   - Last Updated (date)\n   - Monthly Volume (number) — units you buy per month\n4. Send price data to the webhook in JSON format:\n   `{ \"vendor\": \"...\", \"item\": \"...\", \"price\": 0.00, \"currency\": \"INR\" }`",
+        "height": 420,
+        "width": 380
+      },
+      "id": "a3000003-0003-0003-0003-000000000001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, -180]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vendor-price",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a3000003-0003-0003-0003-000000000002",
+      "name": "Price Update Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "vendor-price-webhook"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "f001", "name": "vendor_name", "value": "={{ $json.body.vendor }}", "type": "string" },
+            { "id": "f002", "name": "item_sku", "value": "={{ $json.body.item }}", "type": "string" },
+            { "id": "f003", "name": "new_price", "value": "={{ $json.body.price }}", "type": "number" },
+            { "id": "f004", "name": "currency", "value": "={{ $json.body.currency || 'INR' }}", "type": "string" },
+            { "id": "f005", "name": "PRICE_CHANGE_THRESHOLD", "value": 5, "type": "number" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a3000003-0003-0003-0003-000000000003",
+      "name": "Extract Price Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "baseId": "={{ $env.AIRTABLE_BASE_ID }}",
+        "tableId": "Vendor Prices",
+        "filterByFormula": "=AND({Vendor Name}='{{ $json.vendor_name }}', {Item/SKU}='{{ $json.item_sku }}')",
+        "options": { "maxRecords": 1 }
+      },
+      "id": "a3000003-0003-0003-0003-000000000004",
+      "name": "Get Last Known Price",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [720, 300],
+      "credentials": {
+        "airtableTokenApi": { "id": "airtable-cred", "name": "Airtable API" }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const lastKnown = $input.item.json.records?.[0]?.fields;\nconst newPrice = $('Extract Price Data').item.json.new_price;\nconst threshold = $('Extract Price Data').item.json.PRICE_CHANGE_THRESHOLD;\n\nif (!lastKnown) {\n  return [{ json: {\n    is_new_vendor: true,\n    vendor_name: $('Extract Price Data').item.json.vendor_name,\n    item_sku: $('Extract Price Data').item.json.item_sku,\n    new_price: newPrice,\n    currency: $('Extract Price Data').item.json.currency,\n    change_pct: 0,\n    cost_impact_monthly: 0,\n    needs_alert: false,\n    record_id: null\n  }}];\n}\n\nconst oldPrice = lastKnown['Last Known Price'] || lastKnown['Current Price'] || newPrice;\nconst monthlyVolume = lastKnown['Monthly Volume'] || 0;\nconst changePct = oldPrice > 0 ? ((newPrice - oldPrice) / oldPrice) * 100 : 0;\nconst monthlyImpact = (newPrice - oldPrice) * monthlyVolume;\n\nreturn [{ json: {\n  is_new_vendor: false,\n  vendor_name: $('Extract Price Data').item.json.vendor_name,\n  item_sku: $('Extract Price Data').item.json.item_sku,\n  old_price: oldPrice,\n  new_price: newPrice,\n  currency: $('Extract Price Data').item.json.currency,\n  change_pct: Math.round(changePct * 100) / 100,\n  change_direction: changePct > 0 ? 'increase' : 'decrease',\n  cost_impact_monthly: Math.round(monthlyImpact),\n  monthly_volume: monthlyVolume,\n  needs_alert: Math.abs(changePct) >= threshold,\n  record_id: $input.item.json.records[0].id\n}}];"
+      },
+      "id": "a3000003-0003-0003-0003-000000000005",
+      "name": "Calculate Price Change",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c001",
+              "leftValue": "={{ $json.needs_alert }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a3000003-0003-0003-0003-000000000006",
+      "name": "Significant Change?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "HTTP-Referer", "value": "flowmindlabs.co" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"anthropic/claude-sonnet-4-6\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a procurement analyst. Given a vendor price change, write a 2-3 sentence analysis for the procurement team. Mention if they should negotiate, find alternatives, or accept. Be concise and practical.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Vendor: {{ $json.vendor_name }}\\nItem: {{ $json.item_sku }}\\nPrice change: {{ $json.old_price }} → {{ $json.new_price }} {{ $json.currency }} ({{ $json.change_pct > 0 ? '+' : '' }}{{ $json.change_pct }}%)\\nMonthly volume: {{ $json.monthly_volume }} units\\nMonthly cost impact: {{ $json.currency }} {{ $json.cost_impact_monthly > 0 ? '+' : '' }}{{ $json.cost_impact_monthly }}\"\n    }\n  ],\n  \"max_tokens\": 200\n}",
+        "options": {}
+      },
+      "id": "a3000003-0003-0003-0003-000000000007",
+      "name": "Claude — Impact Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 160],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": { \"type\": \"plain_text\", \"text\": \"Vendor Price Alert — {{ $('Calculate Price Change').item.json.change_direction === 'increase' ? 'Price Increase' : 'Price Drop' }}\", \"emoji\": true }\n    },\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        { \"type\": \"mrkdwn\", \"text\": \"*Vendor:*\\n{{ $('Calculate Price Change').item.json.vendor_name }}\" },\n        { \"type\": \"mrkdwn\", \"text\": \"*Item:*\\n{{ $('Calculate Price Change').item.json.item_sku }}\" },\n        { \"type\": \"mrkdwn\", \"text\": \"*Old Price:*\\n{{ $('Calculate Price Change').item.json.currency }} {{ $('Calculate Price Change').item.json.old_price }}\" },\n        { \"type\": \"mrkdwn\", \"text\": \"*New Price:*\\n{{ $('Calculate Price Change').item.json.currency }} {{ $('Calculate Price Change').item.json.new_price }} ({{ $('Calculate Price Change').item.json.change_pct > 0 ? '+' : '' }}{{ $('Calculate Price Change').item.json.change_pct }}%)\" },\n        { \"type\": \"mrkdwn\", \"text\": \"*Monthly Impact:*\\n{{ $('Calculate Price Change').item.json.currency }} {{ $('Calculate Price Change').item.json.cost_impact_monthly > 0 ? '+' : '' }}{{ $('Calculate Price Change').item.json.cost_impact_monthly }}\" }\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Analysis:*\\n{{ $json.choices[0].message.content }}\" }\n    },\n    {\n      \"type\": \"context\",\n      \"elements\": [{ \"type\": \"mrkdwn\", \"text\": \"Vendor Price Monitor • FlowMind Labs\" }]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "a3000003-0003-0003-0003-000000000008",
+      "name": "Alert Procurement — Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 160]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "baseId": "={{ $env.AIRTABLE_BASE_ID }}",
+        "tableId": "Vendor Prices",
+        "id": "={{ $('Calculate Price Change').item.json.record_id }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Current Price": "={{ $('Calculate Price Change').item.json.new_price }}",
+            "Last Updated": "={{ new Date().toISOString().split('T')[0] }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "a3000003-0003-0003-0003-000000000009",
+      "name": "Update Price in Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1440, 440],
+      "credentials": {
+        "airtableTokenApi": { "id": "airtable-cred", "name": "Airtable API" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"received\", \"alert_sent\": false }",
+        "options": {}
+      },
+      "id": "a3000003-0003-0003-0003-000000000010",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1440, 600]
+    }
+  ],
+  "connections": {
+    "Price Update Webhook": { "main": [[{ "node": "Extract Price Data", "type": "main", "index": 0 }]] },
+    "Extract Price Data": { "main": [[{ "node": "Get Last Known Price", "type": "main", "index": 0 }]] },
+    "Get Last Known Price": { "main": [[{ "node": "Calculate Price Change", "type": "main", "index": 0 }]] },
+    "Calculate Price Change": { "main": [[{ "node": "Significant Change?", "type": "main", "index": 0 }]] },
+    "Significant Change?": {
+      "main": [
+        [{ "node": "Claude — Impact Analysis", "type": "main", "index": 0 }],
+        [{ "node": "Update Price in Airtable", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude — Impact Analysis": { "main": [[{ "node": "Alert Procurement — Slack", "type": "main", "index": 0 }]] },
+    "Alert Procurement — Slack": { "main": [[{ "node": "Update Price in Airtable", "type": "main", "index": 0 }]] },
+    "Update Price in Airtable": { "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "createdAt": "2026-03-24T00:00:00.000Z", "updatedAt": "2026-03-24T00:00:00.000Z", "id": "tag-procurement", "name": "procurement" }],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-24T00:00:00.000Z",
+  "versionId": "v1"
+}
