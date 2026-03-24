@@ -32,10 +32,28 @@ You tell us what's slowing your team down. We automate it.
 - New leads scored and enriched automatically
 - Meeting notes, decisions, and action items generated from transcripts
 - Follow-up emails drafted and sent
+- E-commerce orders synced to inventory with auto customer confirmation
+- Overdue invoices detected and reminders sent automatically with escalation
+- Vendor price changes monitored — alerts your team when supplier costs spike >5%
+- Customer churn risk scored weekly — at-risk accounts surfaced before they leave
+
+### E-commerce & Finance
+- Shopify order webhook → Airtable inventory sync → Gmail order confirmation
+- Stripe overdue invoice detection → tiered email reminders → Slack escalation
+- Vendor/supplier price change monitoring with cost impact analysis
+
+### HR & People
+- New employee onboarding: AI-personalised day-by-day Slack message sequence for 2 weeks
+- Job application tracking with automatic follow-up drafts after 7 days of silence
+
+### Productivity & Operations
+- Weekly meeting overload report — calendar health score, focus block gaps, back-to-back alerts
+- Company document Q&A bot — ask questions in Slack, Claude answers from your Google Drive docs
 
 ### Content & Marketing
 - Blog posts → LinkedIn + Twitter + Instagram in one click
 - Weekly newsletter digest built from your favourite sources automatically
+- Content quality scoring with HTML report — grammar, brand voice, CTA analysis
 
 ### Messaging & Notifications
 - AI assistant across WhatsApp, Telegram, Slack, Discord, and 17 more channels
