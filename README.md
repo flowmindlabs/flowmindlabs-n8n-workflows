@@ -133,8 +133,8 @@ Full setup guide: [guides/16-openclaw-vps-setup-guide.md](guides/16-openclaw-vps
 | Monthly managed automation | From $599/month |
 | White-label automation platform | From $1,200/month |
 
-→ Email: hello@flowmindlabs.com
-→ Website: flowmindlabs.com
+→ Email: contact@flowmindlabs.co
+→ Website: flowmindlabs.co
 
 ---
 
@@ -155,4 +155,4 @@ MIT License — free to use, modify, and sell. Attribution appreciated but not r
 
 ---
 
-*Built with ❤️ by [FlowMind Labs](https://flowmindlabs.com) — AI automation for every team.*
+*Built with love by [FlowMind Labs](https://flowmindlabs.co) — AI automation for every team.*
