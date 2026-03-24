@@ -59,6 +59,10 @@ You tell us what's slowing your team down. We automate it.
 - AI assistant across WhatsApp, Telegram, Slack, Discord, and 17 more channels
 - Voice notes converted to tasks automatically
 - Daily intelligence briefing delivered to your phone every morning
+- Morning briefing: calendar + weather + top news compiled by AI, delivered to your phone at 7AM
+- Receipt photos sent via WhatsApp/Telegram → auto-logged to your expense tracker
+- AWS cloud cost monitoring with weekly AI analysis and anomaly alerts
+- Competitor website monitoring — get alerted when a rival changes their pricing or messaging
 
 ---
 
