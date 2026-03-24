@@ -1,0 +1,165 @@
+{
+  "name": "26 - OpenClaw Morning Briefing",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 26 - OpenClaw Morning Briefing\n\n**What it does:**\n- Runs every morning at 7AM\n- Fetches: today's calendar events, weather, top RSS news, and open tasks\n- Claude compiles a personalised morning briefing\n- Delivers to your phone via OpenClaw (Telegram/WhatsApp)\n\n**Setup:**\n1. Configure Google Calendar OAuth2 credentials\n2. Set environment variables:\n   - `OPENCLAW_WEBHOOK_URL` — your OpenClaw webhook\n   - `OPENCLAW_GATEWAY_TOKEN` — your gateway token\n   - `OPENWEATHER_API_KEY` — from openweathermap.org (free tier)\n   - `OPENCLAW_CHANNEL_ID` — your Telegram/WhatsApp channel ID\n3. Set YOUR_CITY and YOUR_CALENDAR_ID in the Config node\n4. Add your preferred RSS feeds in the RSS node",
+        "height": 380,
+        "width": 360
+      },
+      "id": "b1000001-0001-0001-0001-000000000001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, -160]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 7 * * *" }]
+        }
+      },
+      "id": "b1000001-0001-0001-0001-000000000002",
+      "name": "Every Day 7AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c001", "name": "CALENDAR_ID", "value": "primary", "type": "string" },
+            { "id": "c002", "name": "CITY", "value": "Mumbai", "type": "string" },
+            { "id": "c003", "name": "YOUR_NAME", "value": "there", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1000001-0001-0001-0001-000000000003",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "calendar": { "value": "={{ $json.CALENDAR_ID }}", "__rl": true, "mode": "id" },
+        "timeMin": "={{ new Date().toISOString() }}",
+        "timeMax": "={{ new Date(new Date().setHours(23,59,59,999)).toISOString() }}",
+        "options": { "singleEvents": true, "orderBy": "startTime", "maxResults": 5 }
+      },
+      "id": "b1000001-0001-0001-0001-000000000004",
+      "name": "Fetch Today's Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [720, 160],
+      "credentials": {
+        "googleCalendarOAuth2Api": { "id": "gcal-cred", "name": "Google Calendar" }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.openweathermap.org/data/2.5/weather?q={{ $('Config').item.json.CITY }}&appid={{ $env.OPENWEATHER_API_KEY }}&units=metric",
+        "options": {}
+      },
+      "id": "b1000001-0001-0001-0001-000000000005",
+      "name": "Fetch Weather",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "https://feeds.feedburner.com/ndtvnews-top-stories",
+        "options": {}
+      },
+      "id": "b1000001-0001-0001-0001-000000000006",
+      "name": "Fetch News RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.1,
+      "position": [720, 440]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate all data sources into one context object\nconst calItems = $('Fetch Today\\'s Calendar').all();\nconst weather = $('Fetch Weather').first()?.json;\nconst newsItems = $('Fetch News RSS').all().slice(0, 5);\n\n// Calendar summary\nconst events = calItems.map(i => {\n  const e = i.json;\n  const start = e.start?.dateTime ? new Date(e.start.dateTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'All day';\n  return `${start}: ${e.summary || 'Untitled'}`;\n});\nconst calSummary = events.length > 0 ? events.join('\\n') : 'No meetings today';\n\n// Weather summary\nlet weatherSummary = 'Weather unavailable';\nif (weather?.main) {\n  weatherSummary = `${Math.round(weather.main.temp)}°C, ${weather.weather?.[0]?.description || ''} — feels like ${Math.round(weather.main.feels_like)}°C`;\n}\n\n// News headlines\nconst headlines = newsItems.map(i => `- ${i.json.title}`).join('\\n');\n\nconst name = $('Config').item.json.YOUR_NAME;\nconst city = $('Config').item.json.CITY;\nconst today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });\n\nreturn [{ json: { calSummary, weatherSummary, headlines, name, city, today, event_count: events.length } }];"
+      },
+      "id": "b1000001-0001-0001-0001-000000000007",
+      "name": "Aggregate Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "HTTP-Referer", "value": "flowmindlabs.co" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"anthropic/claude-sonnet-4-6\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a friendly personal assistant delivering a morning briefing. Be warm, concise, and energising. Format for a chat message — no markdown headers, just clean paragraphs. Under 200 words.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Good morning briefing for {{ $json.name }} — {{ $json.today }}\\n\\nWeather in {{ $json.city }}: {{ $json.weatherSummary }}\\n\\nCalendar ({{ $json.event_count }} events):\\n{{ $json.calSummary }}\\n\\nTop news headlines:\\n{{ $json.headlines }}\"\n    }\n  ],\n  \"max_tokens\": 400\n}",
+        "options": {}
+      },
+      "id": "b1000001-0001-0001-0001-000000000008",
+      "name": "Claude — Compile Briefing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OPENCLAW_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENCLAW_GATEWAY_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"{{ $env.OPENCLAW_CHANNEL_ID }}\",\n  \"message\": \"{{ $json.choices[0].message.content }}\"\n}",
+        "options": {}
+      },
+      "id": "b1000001-0001-0001-0001-000000000009",
+      "name": "Send via OpenClaw",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 300],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Every Day 7AM": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": {
+      "main": [[
+        { "node": "Fetch Today's Calendar", "type": "main", "index": 0 },
+        { "node": "Fetch Weather", "type": "main", "index": 0 },
+        { "node": "Fetch News RSS", "type": "main", "index": 0 }
+      ]]
+    },
+    "Fetch Today's Calendar": { "main": [[{ "node": "Aggregate Data", "type": "main", "index": 0 }]] },
+    "Fetch Weather": { "main": [[{ "node": "Aggregate Data", "type": "main", "index": 0 }]] },
+    "Fetch News RSS": { "main": [[{ "node": "Aggregate Data", "type": "main", "index": 0 }]] },
+    "Aggregate Data": { "main": [[{ "node": "Claude — Compile Briefing", "type": "main", "index": 0 }]] },
+    "Claude — Compile Briefing": { "main": [[{ "node": "Send via OpenClaw", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "createdAt": "2026-03-24T00:00:00.000Z", "updatedAt": "2026-03-24T00:00:00.000Z", "id": "tag-openclaw", "name": "openclaw" }],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-24T00:00:00.000Z",
+  "versionId": "v1"
+}
