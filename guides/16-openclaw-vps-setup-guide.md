@@ -312,4 +312,4 @@ sudo certbot renew --force-renewal
 
 ---
 
-*Built by FlowMind Labs — flowmindlabs.com*
+*Built by FlowMind Labs — flowmindlabs.co | contact@flowmindlabs.co*
