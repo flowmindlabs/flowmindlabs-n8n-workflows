@@ -1,0 +1,216 @@
+{
+  "name": "OpenClaw — Voice to Task Creator",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 🎤 OpenClaw Voice-to-Task Creator\n\n**What this workflow does:**\nReceives a voice message or audio URL via OpenClaw (from WhatsApp voice note, Telegram voice, etc.). Transcribes with OpenAI Whisper, extracts tasks using Claude, and creates them in your task manager (Notion, Linear, Trello, or just Slack).\n\n**Prerequisites:**\n- OpenClaw running with voice message support enabled\n- OpenAI API key (for Whisper transcription)\n- Claude API key (for task extraction)\n- Task manager integration (Notion/Linear/Slack)\n\n**Setup steps:**\n1. Configure OpenClaw to forward voice messages to this webhook\n2. Add OpenAI API credentials (for Whisper)\n3. Add Claude API credentials\n4. Choose your task destination in the `Task Destination` node\n5. Add Notion/Linear/Trello credentials if needed\n\n**Payload from OpenClaw:**\n```json\n{\n  \"audio_url\": \"https://...\",\n  \"user_name\": \"Rahul\",\n  \"channel\": \"whatsapp\",\n  \"duration_secs\": 45\n}\n```",
+        "height": 440,
+        "width": 480,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -280]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "openclaw-voice",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "Voice Message from OpenClaw",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 80],
+      "webhookId": "openclaw-voice-task"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "v1",
+              "name": "audio_url",
+              "value": "={{ $json.body?.audio_url || $json.body?.voice_url || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "v2",
+              "name": "user_name",
+              "value": "={{ $json.body?.user_name || $json.body?.from || 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "v3",
+              "name": "channel",
+              "value": "={{ $json.body?.channel || 'unknown' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Extract Voice Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.audio_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "http-001",
+      "name": "Download Audio File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {"parameterType": "formBinaryData", "name": "file", "inputDataFieldName": "data"},
+            {"name": "model", "value": "whisper-1"},
+            {"name": "language", "value": "en"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "Transcribe with Whisper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_OPENAI_CRED_ID",
+          "name": "OpenAI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## 🔑 OpenAI Whisper Credentials\n\nAdd HTTP Header Auth credential:\n- Name: `OpenAI API Key`\n- Header: `Authorization`\n- Value: `Bearer sk-...` (from platform.openai.com/api-keys)\n\n**Alternative (free):** Use a local Whisper model via LocalAI or Ollama — change URL to your local endpoint.",
+        "height": 220,
+        "width": 360,
+        "color": 6
+      },
+      "id": "sticky-002",
+      "name": "Whisper Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [700, -200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 800,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Extract all tasks, action items, and to-dos from this voice note transcription.\\n\\nSender: {{ $('Extract Voice Data').item.json.user_name }}\\nChannel: {{ $('Extract Voice Data').item.json.channel }}\\n\\nTRANSCRIPT:\\n{{ $json.text }}\\n\\nReturn JSON:\\n{\\n  \\\"raw_transcript\\\": \\\"{{ $json.text }}\\\",\\n  \\\"tasks\\\": [\\n    {\\n      \\\"title\\\": \\\"clear imperative task title\\\",\\n      \\\"description\\\": \\\"details if any\\\",\\n      \\\"assignee\\\": \\\"person mentioned or 'self'\\\",\\n      \\\"due_date\\\": \\\"date mentioned or null\\\",\\n      \\\"priority\\\": \\\"high|medium|low\\\",\\n      \\\"project\\\": \\\"project/context if mentioned\\\"\\n    }\\n  ],\\n  \\\"summary\\\": \\\"One sentence summary of voice note\\\",\\n  \\\"task_count\\\": 0\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-003",
+      "name": "Claude Extracts Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json.content[0].text;\nlet extracted;\ntry {\n  extracted = JSON.parse(raw);\n} catch (e) {\n  const m = raw.match(/\\{[\\s\\S]*\\}/);\n  try { extracted = JSON.parse(m[0]); } catch { extracted = { raw_transcript: '', tasks: [], summary: 'Could not parse', task_count: 0 }; }\n}\nconst voice = $('Extract Voice Data').first().json;\nreturn [{ json: { ...extracted, user_name: voice.user_name, channel: voice.channel, created_at: new Date().toISOString() } }];"
+      },
+      "id": "code-001",
+      "name": "Parse Tasks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\"type\": \"header\", \"text\": {\"type\": \"plain_text\", \"text\": \"🎤 Voice Note → {{ $json.task_count }} Tasks Created\"}},\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\"type\": \"mrkdwn\", \"text\": \"*From:*\\n{{ $json.user_name }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Channel:*\\n{{ $json.channel }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Tasks:*\\n{{ $json.task_count }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Time:*\\n{{ $json.created_at }}\"}\n      ]\n    },\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Summary:*\\n{{ $json.summary }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Tasks:*\\n{{ $json.tasks.map(t => `• *[${t.priority}]* ${t.title} → ${t.assignee}`).join('\\n') }}\"}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "http-004",
+      "name": "Post Tasks to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({tasks: $('Parse Tasks').item.json.task_count, summary: $('Parse Tasks').item.json.summary}) }}",
+        "options": {}
+      },
+      "id": "respond-001",
+      "name": "Return Tasks",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1620, 80]
+    }
+  ],
+  "connections": {
+    "Voice Message from OpenClaw": {
+      "main": [[{"node": "Extract Voice Data", "type": "main", "index": 0}]]
+    },
+    "Extract Voice Data": {
+      "main": [[{"node": "Download Audio File", "type": "main", "index": 0}]]
+    },
+    "Download Audio File": {
+      "main": [[{"node": "Transcribe with Whisper", "type": "main", "index": 0}]]
+    },
+    "Transcribe with Whisper": {
+      "main": [[{"node": "Claude Extracts Tasks", "type": "main", "index": 0}]]
+    },
+    "Claude Extracts Tasks": {
+      "main": [[{"node": "Parse Tasks", "type": "main", "index": 0}]]
+    },
+    "Parse Tasks": {
+      "main": [[{"node": "Post Tasks to Slack", "type": "main", "index": 0}]]
+    },
+    "Post Tasks to Slack": {
+      "main": [[{"node": "Return Tasks", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "openclaw"}, {"name": "voice"}, {"name": "task-management"}, {"name": "flowmindlabs"}]
+}
