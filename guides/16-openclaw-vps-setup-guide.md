@@ -10,35 +10,85 @@ OpenClaw is a self-hosted personal AI assistant gateway that connects to 20+ mes
 
 **GitHub:** https://github.com/openclaw/openclaw
 
+> **v2026.3.22 Breaking Changes:** If upgrading from an older version, see the [Breaking Changes](#breaking-changes-v20263.22) section before proceeding.
+
 ---
 
 ## Recommended VPS
 
 | Provider | Plan | Cost | Why |
 |----------|------|------|-----|
-| **Hetzner** | CX21 (2 vCPU, 4GB RAM) | ~€4/month | Best price/performance in EU/India |
-| DigitalOcean | Basic (2GB RAM) | $12/month | Simple, good docs |
-| Contabo | VPS S | ~€5/month | Cheap EU option |
-| AWS Lightsail | $3.50/month | $3.50/month | AWS ecosystem |
+| **Hostinger** | KVM 2 (2 vCPU, 8GB RAM) | ~₹649/month | Best for Indian teams, hPanel Docker Manager built-in |
+| DigitalOcean | Basic (2GB RAM) | ~₹1,020/month | Simple, good docs |
+| AWS Lightsail | $3.50/month | ~₹300/month | AWS ecosystem |
 
 **Recommended OS:** Ubuntu 22.04 LTS
 
 ---
 
-## Step 1 — Create Your VPS
+## Option A — Hostinger VPS (Recommended for Indian Teams)
 
-### Hetzner (Recommended)
+Hostinger offers two ways to install OpenClaw on their VPS. **Docker Manager method is recommended.**
+
+### Method 1 — Pre-installed at Checkout
+
+1. Go to [hostinger.com/vps-hosting](https://www.hostinger.com/vps-hosting)
+2. Select your VPS plan
+3. During checkout, look for **"Pre-installed applications"**
+4. Select **OpenClaw** from the list
+5. Complete checkout — OpenClaw will be ready when VPS provisions
+
+Access your instance from **hPanel → VPS Overview** button.
+
+---
+
+### Method 2 — Docker Manager in hPanel (Recommended)
+
+If you already have a Hostinger VPS or skipped pre-install:
+
 ```bash
-# 1. Sign up at hetzner.com/cloud
-# 2. Create project → Add Server
-# 3. Choose: Ubuntu 22.04, CX21 (4GB), Nuremberg datacenter
-# 4. Add your SSH key
-# 5. Note the server IP address
+# 1. Log in to hPanel → VPS → your server → Docker Manager
+# 2. Click "Add Container"
+# 3. Set image: openclaw/openclaw:latest
+# 4. Set the following environment variables:
+```
+
+**Required environment variables:**
+
+| Variable | Value |
+|----------|-------|
+| `OPENCLAW_GATEWAY_TOKEN` | Your secret gateway token (generate a random string) |
+| `WHATSAPP_NUMBER` | Your WhatsApp number in international format (e.g. `+919876543210`) |
+| `TELEGRAM_BOT_TOKEN` | Token from @BotFather |
+| `ANTHROPIC_API_KEY` | Your Claude API key |
+| `OPENCLAW_WEBHOOK_URL` | `http://your-n8n-ip:5678/webhook/openclaw-message` |
+
+```bash
+# 5. Set port mapping: 18789:18789
+# 6. Set restart policy: Always
+# 7. Click "Deploy"
+```
+
+Access OpenClaw at: `http://your-vps-ip:18789`
+
+---
+
+### Updating OpenClaw on Hostinger
+
+```bash
+# Via Docker Manager in hPanel:
+# 1. Go to your container → "Update Image"
+# 2. Pull latest: openclaw/openclaw:latest
+# 3. Recreate container (settings are preserved)
 ```
 
 ---
 
-## Step 2 — Initial Server Setup
+## Option B — Manual Install on Any VPS
+
+Use this if you are not on Hostinger or prefer full control.
+
+### Step 1 — Initial Server Setup
 
 ```bash
 # SSH into your server
@@ -52,41 +102,32 @@ adduser openclaw
 usermod -aG sudo openclaw
 su - openclaw
 
-# Install Node.js 20+ (required by OpenClaw)
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
-
-# Verify
-node --version  # Should show v20.x+
-npm --version
+# Enable linger (keeps services running after logout)
+loginctl enable-linger $USER
 ```
 
----
+### Step 2 — Install OpenClaw
 
-## Step 3 — Install OpenClaw
+> **Important (v2026.3.22+):** Use the official install script instead of `npm install -g openclaw` — the npm install path has a known WhatsApp sidecar regression.
 
 ```bash
-# Install OpenClaw globally
-sudo npm install -g openclaw
+# Install via official script
+curl -fsSL https://get.openclaw.io/install.sh | bash
 
 # Verify installation
 openclaw --version
 
-# Create config directory
+# State directory is now ~/.openclaw (was .moltbot in older versions)
 mkdir -p ~/.openclaw
-cd ~/.openclaw
 ```
 
----
-
-## Step 4 — Configure OpenClaw
+### Step 3 — Configure OpenClaw
 
 ```bash
 # Initialize config
 openclaw init
 
-# This creates ~/.openclaw/config.json
-# Edit it:
+# Edit config
 nano ~/.openclaw/config.json
 ```
 
@@ -100,9 +141,9 @@ Example config:
       "enabled": true,
       "token": "YOUR_TELEGRAM_BOT_TOKEN"
     },
-    "slack": {
-      "enabled": false,
-      "token": "YOUR_SLACK_BOT_TOKEN"
+    "whatsapp": {
+      "enabled": true,
+      "number": "YOUR_WHATSAPP_NUMBER"
     }
   },
   "webhook_output": "http://localhost:5678/webhook/openclaw-message",
@@ -110,21 +151,19 @@ Example config:
 }
 ```
 
+> **v2026.3.22+:** Environment variables now use `OPENCLAW_*` prefix (e.g. `OPENCLAW_GATEWAY_TOKEN`, `OPENCLAW_WEBHOOK_URL`). The old `CLAWDBOT_*` prefix is no longer supported.
+
 **Get a Telegram Bot Token:**
 1. Message @BotFather on Telegram
 2. Send `/newbot`
 3. Follow prompts — copy the token
 
----
-
-## Step 5 — Run as systemd Service (Auto-restart)
+### Step 4 — Run as systemd Service
 
 ```bash
-# Create systemd service
 sudo nano /etc/systemd/system/openclaw.service
 ```
 
-Paste this content:
 ```ini
 [Unit]
 Description=OpenClaw AI Assistant Gateway
@@ -134,40 +173,30 @@ After=network.target
 Type=simple
 User=openclaw
 WorkingDirectory=/home/openclaw/.openclaw
-ExecStart=/usr/bin/openclaw start
+ExecStart=/usr/local/bin/openclaw start
 Restart=on-failure
 RestartSec=10
 StandardOutput=syslog
 StandardError=syslog
 SyslogIdentifier=openclaw
 Environment=NODE_ENV=production
+Environment=OPENCLAW_GATEWAY_TOKEN=your-secret-token
 
 [Install]
 WantedBy=multi-user.target
 ```
 
 ```bash
-# Enable and start
 sudo systemctl daemon-reload
 sudo systemctl enable openclaw
 sudo systemctl start openclaw
-
-# Check status
 sudo systemctl status openclaw
-
-# View logs
-sudo journalctl -u openclaw -f
 ```
 
----
-
-## Step 6 — Secure with Nginx Reverse Proxy
+### Step 5 — Nginx Reverse Proxy
 
 ```bash
-# Install Nginx
 sudo apt install nginx -y
-
-# Create config
 sudo nano /etc/nginx/sites-available/openclaw
 ```
 
@@ -184,7 +213,6 @@ server {
         proxy_set_header Host $host;
         proxy_cache_bypass $http_upgrade;
 
-        # Security headers
         add_header X-Frame-Options DENY;
         add_header X-Content-Type-Options nosniff;
     }
@@ -197,72 +225,98 @@ sudo nginx -t
 sudo systemctl restart nginx
 ```
 
----
-
-## Step 7 — Add SSL (HTTPS) with Certbot
+### Step 6 — SSL with Certbot
 
 ```bash
-# Install Certbot
 sudo apt install certbot python3-certbot-nginx -y
-
-# Get certificate (replace with your domain)
 sudo certbot --nginx -d your-domain.com
-
-# Auto-renewal test
 sudo certbot renew --dry-run
 ```
 
----
-
-## Step 8 — Configure Firewall
+### Step 7 — Firewall
 
 ```bash
-# Allow only necessary ports
 sudo ufw allow OpenSSH
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
-sudo ufw deny 18789  # Block direct access to OpenClaw port
+sudo ufw deny 18789
 sudo ufw enable
-
-# Verify
 sudo ufw status
 ```
 
 ---
 
-## Step 9 — Connect to n8n
+## Option C — Emergent.sh (Managed Cloud)
 
-If you're running n8n on the same VPS:
+[Emergent.sh](https://emergent.sh) offers a managed OpenClaw / MoltBot deployment — no VPS management needed.
 
-```bash
-# Install n8n
-sudo npm install -g n8n
+- No server setup required
+- Runs OpenClaw in a managed container
+- Good for testing before committing to a VPS
 
-# Run n8n (or set up as systemd service)
-n8n start
+Visit [emergent.sh/tutorial/moltbot-on-emergent](https://emergent.sh/tutorial/moltbot-on-emergent) for their official setup tutorial.
 
-# n8n runs on port 5678 by default
-# Access at: http://YOUR_IP:5678
-```
+---
 
-In OpenClaw config, set:
+## Connect to n8n
+
+In OpenClaw config (or env var `OPENCLAW_WEBHOOK_URL`), set your n8n webhook:
+
 ```json
 "webhook_output": "http://127.0.0.1:5678/webhook/openclaw-message"
 ```
 
+If n8n is on the same machine:
+```bash
+sudo npm install -g n8n
+n8n start
+# Access at: http://YOUR_IP:5678
+```
+
 ---
 
-## Step 10 — Test Everything
+## Test Your Setup
 
 ```bash
 # Check OpenClaw is running
 curl http://127.0.0.1:18789/health
 
-# Send test message via Telegram
-# (Message your bot, it should trigger n8n webhook)
-
-# View OpenClaw logs
+# View logs
 sudo journalctl -u openclaw -f
+
+# Send a message to your Telegram bot — it should trigger the n8n webhook
+```
+
+---
+
+## Breaking Changes — v2026.3.22
+
+If upgrading from a version older than March 2026:
+
+| Old | New |
+|-----|-----|
+| `CLAWDBOT_*` env vars | `OPENCLAW_*` env vars |
+| `~/.moltbot` state directory | `~/.openclaw` state directory |
+| `npm install -g openclaw` | Use official install script (WhatsApp sidecar regression in npm path) |
+| Plugin SDK at `~/.moltbot/plugins` | Now at `~/.openclaw/plugins` |
+
+**Migration steps:**
+```bash
+# 1. Stop the service
+sudo systemctl stop openclaw
+
+# 2. Copy state directory
+cp -r ~/.moltbot ~/.openclaw
+
+# 3. Update env vars in systemd service file (CLAWDBOT_ → OPENCLAW_)
+sudo nano /etc/systemd/system/openclaw.service
+
+# 4. Reinstall via script
+curl -fsSL https://get.openclaw.io/install.sh | bash
+
+# 5. Restart
+sudo systemctl daemon-reload
+sudo systemctl start openclaw
 ```
 
 ---
@@ -274,7 +328,8 @@ sudo journalctl -u openclaw -f
 - [ ] UFW firewall enabled, port 18789 blocked externally
 - [ ] Nginx reverse proxy with SSL
 - [ ] Secrets in environment variables, not config files
-- [ ] Automatic security updates enabled: `sudo apt install unattended-upgrades`
+- [ ] `loginctl enable-linger` enabled for your user
+- [ ] Automatic security updates: `sudo apt install unattended-upgrades`
 - [ ] Fail2ban installed: `sudo apt install fail2ban`
 
 ---
@@ -283,10 +338,10 @@ sudo journalctl -u openclaw -f
 
 | Item | Cost |
 |------|------|
-| Hetzner CX21 VPS | €4/month |
-| Domain (optional) | €1/month |
+| Hostinger KVM 2 VPS | ~₹649/month |
+| Domain (optional) | ~₹850/year |
 | SSL (Certbot) | Free |
-| **Total** | **~€5/month** |
+| **Total** | **~₹649–₹720/month** |
 
 ---
 
@@ -295,14 +350,16 @@ sudo journalctl -u openclaw -f
 **OpenClaw won't start:**
 ```bash
 sudo journalctl -u openclaw -n 50
-# Check for port conflicts
 sudo lsof -i :18789
 ```
 
 **Telegram bot not responding:**
-- Verify bot token in config
-- Check n8n webhook URL is correct
-- Ensure n8n is running: `curl http://localhost:5678/healthz`
+- Verify `TELEGRAM_BOT_TOKEN` in config/env vars
+- Check n8n webhook URL is correct and n8n is running: `curl http://localhost:5678/healthz`
+
+**WhatsApp not connecting:**
+- Use the official install script (not npm) — known npm sidecar regression in v2026.3.22+
+- Verify `WHATSAPP_NUMBER` is in full international format
 
 **SSL certificate issues:**
 ```bash
@@ -312,4 +369,4 @@ sudo certbot renew --force-renewal
 
 ---
 
-*Built by FlowMind Labs — flowmindlabs.co | contact@flowmindlabs.co*
+*Built by FlowMind Labs — flowmindlabs.co | contact.flowmindlabs@gmail.com*
