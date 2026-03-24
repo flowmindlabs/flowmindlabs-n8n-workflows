@@ -1,0 +1,238 @@
+{
+  "name": "Call Center — AI First Response Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 🤖 AI First Response Bot\n\n**What this workflow does:**\nAutomatically sends a personalized, AI-crafted first response to new support tickets within seconds. Reduces first-response time from hours to seconds. Includes company-specific knowledge base context.\n\n**Setup steps:**\n1. Connect your helpdesk webhook (Zendesk/Freshdesk/Intercom)\n2. Add Claude API credentials\n3. Edit the `Company KB` node — add your product name, common issues, and policies\n4. Add your email SMTP credentials to send auto-responses\n   - OR use HTTP node to POST response back to helpdesk API\n5. Set `REPLY_EMAIL_FROM` to your support email address\n\n**Customize the tone:**\nEdit the Claude prompt to match your brand voice (formal, friendly, technical, etc.)",
+        "height": 380,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -220]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-first-response",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "New Ticket Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 80],
+      "webhookId": "ai-first-response"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "kb1",
+              "name": "company_name",
+              "value": "Your Company Name",
+              "type": "string"
+            },
+            {
+              "id": "kb2",
+              "name": "product_name",
+              "value": "Your Product",
+              "type": "string"
+            },
+            {
+              "id": "kb3",
+              "name": "support_hours",
+              "value": "Monday-Friday, 9am-6pm IST",
+              "type": "string"
+            },
+            {
+              "id": "kb4",
+              "name": "common_solutions",
+              "value": "- Password reset: Visit /account/reset-password\n- Billing issues: Contact billing@yourcompany.com\n- API docs: docs.yourcompany.com\n- Status page: status.yourcompany.com\n- Emergency: +91-XXXXXXXXXX",
+              "type": "string"
+            },
+            {
+              "id": "kb5",
+              "name": "reply_from",
+              "value": "support@yourcompany.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Company KB — Edit This",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "content": "## ✏️ IMPORTANT — Edit Company KB\n\nOpen the `Company KB — Edit This` node and fill in:\n- `company_name` — your company name\n- `product_name` — your product/service\n- `support_hours` — your actual support hours\n- `common_solutions` — self-service links and quick fixes\n- `reply_from` — your support email address\n\nThis context is injected into Claude's prompt so responses are accurate and on-brand.",
+        "height": 240,
+        "width": 360,
+        "color": 7
+      },
+      "id": "sticky-002",
+      "name": "Must Edit",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [260, -200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "t1",
+              "name": "customer_name",
+              "value": "={{ $('New Ticket Trigger').item.json.body?.requester?.name || $('New Ticket Trigger').item.json.body?.name || 'there' }}",
+              "type": "string"
+            },
+            {
+              "id": "t2",
+              "name": "customer_email",
+              "value": "={{ $('New Ticket Trigger').item.json.body?.requester?.email || $('New Ticket Trigger').item.json.body?.email || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "t3",
+              "name": "ticket_subject",
+              "value": "={{ $('New Ticket Trigger').item.json.body?.subject || $('New Ticket Trigger').item.json.body?.title || 'Your request' }}",
+              "type": "string"
+            },
+            {
+              "id": "t4",
+              "name": "ticket_body",
+              "value": "={{ $('New Ticket Trigger').item.json.body?.description || $('New Ticket Trigger').item.json.body?.body || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-002",
+      "name": "Extract Ticket Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [520, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 800,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"You are a friendly and professional customer support agent for {{ $('Company KB — Edit This').item.json.company_name }}, makers of {{ $('Company KB — Edit This').item.json.product_name }}.\\n\\nWrite a warm, helpful first-response email to this customer. The response should:\\n1. Greet them by name\\n2. Acknowledge their specific issue (show you read it)\\n3. Provide any immediately helpful self-service options from our KB\\n4. Set expectations for full resolution timeline\\n5. End warmly\\n\\nKEEP IT UNDER 150 WORDS. Sound human, not robotic.\\n\\nCompany Knowledge Base:\\n{{ $('Company KB — Edit This').item.json.common_solutions }}\\n\\nSupport Hours: {{ $('Company KB — Edit This').item.json.support_hours }}\\n\\nCustomer Name: {{ $json.customer_name }}\\nTicket Subject: {{ $json.ticket_subject }}\\nCustomer Message: {{ $json.ticket_body }}\\n\\nWrite only the email body (no subject line, no From/To headers).\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Generate AI Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "resp1",
+              "name": "email_body",
+              "value": "={{ $json.content[0].text }}",
+              "type": "string"
+            },
+            {
+              "id": "resp2",
+              "name": "email_subject",
+              "value": "=Re: {{ $('Extract Ticket Data').item.json.ticket_subject }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-003",
+      "name": "Prepare Email",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [960, 80]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Company KB — Edit This').item.json.reply_from }}",
+        "toEmail": "={{ $('Extract Ticket Data').item.json.customer_email }}",
+        "subject": "={{ $json.email_subject }}",
+        "emailType": "text",
+        "message": "={{ $json.email_body }}",
+        "options": {}
+      },
+      "id": "email-001",
+      "name": "Send Auto-Response Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1180, 80],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_SMTP_CRED_ID",
+          "name": "SMTP — Support Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {}
+      },
+      "id": "respond-001",
+      "name": "Webhook OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1400, 80]
+    }
+  ],
+  "connections": {
+    "New Ticket Trigger": {
+      "main": [[{"node": "Company KB — Edit This", "type": "main", "index": 0}]]
+    },
+    "Company KB — Edit This": {
+      "main": [[{"node": "Extract Ticket Data", "type": "main", "index": 0}]]
+    },
+    "Extract Ticket Data": {
+      "main": [[{"node": "Generate AI Response", "type": "main", "index": 0}]]
+    },
+    "Generate AI Response": {
+      "main": [[{"node": "Prepare Email", "type": "main", "index": 0}]]
+    },
+    "Prepare Email": {
+      "main": [[{"node": "Send Auto-Response Email", "type": "main", "index": 0}]]
+    },
+    "Send Auto-Response Email": {
+      "main": [[{"node": "Webhook OK", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "call-center"}, {"name": "email-automation"}, {"name": "flowmindlabs"}]
+}
