@@ -1,0 +1,221 @@
+{
+  "name": "Business — Lead Enrichment and Scoring",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 🎯 Lead Enrichment + AI Scoring\n\n**What this workflow does:**\nReceives a new lead (name + email + company), enriches it with company data from Clearbit/Apollo (optional), then Claude scores the lead 0-100 with a detailed ICP fit analysis. Notifies sales team on Slack.\n\n**Setup steps:**\n1. Trigger via webhook (CRM, website form, LinkedIn form)\n2. Add Claude API credentials\n3. **Optional enrichment:** Add Clearbit API key in the HTTP node\n   - Get free key at: clearbit.com/docs\n4. Configure your Ideal Customer Profile (ICP) in the `ICP Definition` node\n5. Set Slack webhook for sales team notifications\n\n**Payload format:**\n```json\n{\n  \"name\": \"Rahul Kumar\",\n  \"email\": \"rahul@company.com\",\n  \"company\": \"TechCorp India\",\n  \"title\": \"CTO\",\n  \"source\": \"website|linkedin|referral\"\n}\n```",
+        "height": 420,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -240]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-scoring",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "New Lead",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 80],
+      "webhookId": "lead-enrichment-scoring"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "l1",
+              "name": "lead_name",
+              "value": "={{ $json.body?.name || 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "l2",
+              "name": "lead_email",
+              "value": "={{ $json.body?.email || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "l3",
+              "name": "company",
+              "value": "={{ $json.body?.company || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "l4",
+              "name": "title",
+              "value": "={{ $json.body?.title || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "l5",
+              "name": "source",
+              "value": "={{ $json.body?.source || 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "l6",
+              "name": "message",
+              "value": "={{ $json.body?.message || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Extract Lead Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "icp1",
+              "name": "target_company_sizes",
+              "value": "10-500 employees (SMB to mid-market)",
+              "type": "string"
+            },
+            {
+              "id": "icp2",
+              "name": "target_industries",
+              "value": "SaaS, Fintech, E-commerce, Healthcare IT, EdTech",
+              "type": "string"
+            },
+            {
+              "id": "icp3",
+              "name": "target_titles",
+              "value": "CTO, VP Engineering, Head of Product, Founder, CEO (startup)",
+              "type": "string"
+            },
+            {
+              "id": "icp4",
+              "name": "target_regions",
+              "value": "India, Southeast Asia, Middle East",
+              "type": "string"
+            },
+            {
+              "id": "icp5",
+              "name": "budget_signal",
+              "value": "Funded startup or profitable SMB with tech spend",
+              "type": "string"
+            },
+            {
+              "id": "icp6",
+              "name": "product_value_prop",
+              "value": "AI-powered automation workflows that save 10+ hours/week",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-002",
+      "name": "ICP Definition — Edit This",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 900,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"You are a B2B sales expert. Score this lead against our Ideal Customer Profile (ICP).\\n\\nLEAD:\\nName: {{ $('Extract Lead Data').item.json.lead_name }}\\nEmail: {{ $('Extract Lead Data').item.json.lead_email }}\\nCompany: {{ $('Extract Lead Data').item.json.company }}\\nTitle: {{ $('Extract Lead Data').item.json.title }}\\nSource: {{ $('Extract Lead Data').item.json.source }}\\nMessage: {{ $('Extract Lead Data').item.json.message }}\\n\\nOUR ICP:\\nTarget Company Size: {{ $('ICP Definition — Edit This').item.json.target_company_sizes }}\\nTarget Industries: {{ $('ICP Definition — Edit This').item.json.target_industries }}\\nTarget Titles: {{ $('ICP Definition — Edit This').item.json.target_titles }}\\nTarget Regions: {{ $('ICP Definition — Edit This').item.json.target_regions }}\\nBudget Signal: {{ $('ICP Definition — Edit This').item.json.budget_signal }}\\nValue Proposition: {{ $('ICP Definition — Edit This').item.json.product_value_prop }}\\n\\nReturn JSON:\\n{\\n  \\\"score\\\": 0-100,\\n  \\\"grade\\\": \\\"A|B|C|D\\\",\\n  \\\"icp_fit\\\": \\\"strong|moderate|weak|no-fit\\\",\\n  \\\"score_breakdown\\\": {\\\"title_match\\\": 0-25, \\\"industry_match\\\": 0-25, \\\"company_match\\\": 0-25, \\\"intent_signals\\\": 0-25},\\n  \\\"strengths\\\": [],\\n  \\\"concerns\\\": [],\\n  \\\"recommended_action\\\": \\\"immediate-outreach|nurture|disqualify\\\",\\n  \\\"outreach_angle\\\": \\\"Personalized opening line for sales outreach\\\",\\n  \\\"next_step\\\": \\\"\\\"\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Claude Scores Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [580, 160],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json.content[0].text;\nlet scoring;\ntry {\n  scoring = JSON.parse(raw);\n} catch (e) {\n  const m = raw.match(/\\{[\\s\\S]*\\}/);\n  try { scoring = JSON.parse(m[0]); } catch { scoring = { score: 50, grade: 'C', icp_fit: 'moderate', score_breakdown: {}, strengths: [], concerns: [], recommended_action: 'nurture', outreach_angle: '', next_step: 'Manual review needed' }; }\n}\n\nconst lead = $('Extract Lead Data').first().json;\nconst scoreEmoji = scoring.score >= 80 ? '🟢' : scoring.score >= 60 ? '🟡' : '🔴';\n\nreturn [{ json: {\n  ...scoring,\n  ...lead,\n  score_emoji: scoreEmoji,\n  scored_at: new Date().toISOString()\n}}];"
+      },
+      "id": "code-001",
+      "name": "Parse Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\"type\": \"header\", \"text\": {\"type\": \"plain_text\", \"text\": \"{{ $json.score_emoji }} New Lead Scored: {{ $json.lead_name }}\"}},\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\"type\": \"mrkdwn\", \"text\": \"*Name:*\\n{{ $json.lead_name }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Company:*\\n{{ $json.company }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Title:*\\n{{ $json.title }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Score:*\\n{{ $json.score }}/100 ({{ $json.grade }})\"}\n      ]\n    },\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*ICP Fit:*\\n{{ $json.icp_fit }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Outreach Angle:*\\n{{ $json.outreach_angle }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Action:*\\n{{ $json.recommended_action }} — {{ $json.next_step }}\"}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "Notify Sales Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 160]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({score: $('Parse Score').item.json.score, grade: $('Parse Score').item.json.grade, action: $('Parse Score').item.json.recommended_action}) }}",
+        "options": {}
+      },
+      "id": "respond-001",
+      "name": "Return Score",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1240, 160]
+    }
+  ],
+  "connections": {
+    "New Lead": {
+      "main": [[{"node": "Extract Lead Data", "type": "main", "index": 0}]]
+    },
+    "Extract Lead Data": {
+      "main": [[{"node": "ICP Definition — Edit This", "type": "main", "index": 0}]]
+    },
+    "ICP Definition — Edit This": {
+      "main": [[{"node": "Claude Scores Lead", "type": "main", "index": 0}]]
+    },
+    "Claude Scores Lead": {
+      "main": [[{"node": "Parse Score", "type": "main", "index": 0}]]
+    },
+    "Parse Score": {
+      "main": [[{"node": "Notify Sales Team", "type": "main", "index": 0}]]
+    },
+    "Notify Sales Team": {
+      "main": [[{"node": "Return Score", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "business"}, {"name": "sales"}, {"name": "lead-scoring"}, {"name": "flowmindlabs"}]
+}
