@@ -1,0 +1,205 @@
+{
+  "name": "AI Ops — Incident Alert Enricher",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 🚨 Incident Alert Enricher\n\n**What this workflow does:**\nReceives a webhook alert (from PagerDuty, Grafana, Prometheus, or any monitoring tool), enriches it with AI analysis, and posts a structured incident summary to Slack.\n\n**Setup steps:**\n1. Configure the Webhook node URL in your monitoring tool\n2. Add your Claude API key in Credentials → Add New → Header Auth\n   - Name: `x-api-key`, Value: `your-claude-api-key`\n   - OR use OpenRouter: Header Auth, Name: `Authorization`, Value: `Bearer your-openrouter-key`\n3. Add Slack Webhook URL in the Slack node credentials\n4. Set `SLACK_CHANNEL` in the Set node to your target channel\n\n**Credential setup:**\n- Claude API: https://console.anthropic.com/settings/keys\n- OpenRouter (alternative): https://openrouter.ai/keys\n- Slack Webhook: https://api.slack.com/messaging/webhooks",
+        "height": 380,
+        "width": 480,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -200]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "incident-alert",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "Receive Alert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 80],
+      "webhookId": "incident-alert-enricher"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "alert_title",
+              "value": "={{ $json.body?.title || $json.body?.alertname || $json.body?.summary || 'Unknown Alert' }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "alert_severity",
+              "value": "={{ $json.body?.severity || $json.body?.priority || 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "alert_service",
+              "value": "={{ $json.body?.service || $json.body?.source || $json.body?.labels?.job || 'unknown-service' }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "alert_message",
+              "value": "={{ $json.body?.message || $json.body?.description || $json.body?.annotations?.description || 'No description provided' }}",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "alert_timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Normalize Alert Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 1024,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"You are a senior SRE. Analyze this incident alert and provide:\\n1. Root cause hypothesis (2-3 sentences)\\n2. Immediate actions (3 bullet points)\\n3. Severity assessment (P1/P2/P3/P4)\\n4. Estimated resolution time\\n\\nAlert Details:\\nTitle: {{ $json.alert_title }}\\nSeverity: {{ $json.alert_severity }}\\nService: {{ $json.alert_service }}\\nMessage: {{ $json.alert_message }}\\nTimestamp: {{ $json.alert_timestamp }}\\n\\nRespond in this exact JSON format:\\n{\\\"hypothesis\\\": \\\"\\\", \\\"actions\\\": [], \\\"severity\\\": \\\"\\\", \\\"eta\\\": \\\"\\\"}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Enrich with Claude AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## 🔧 AI Node — Credential Setup\n\n**Option A: Claude API (Anthropic)**\n- Go to Credentials → New → HTTP Header Auth\n- Name: `Claude API Key`\n- Header Name: `x-api-key`\n- Header Value: `sk-ant-api...` (from console.anthropic.com)\n\n**Option B: OpenRouter (cheaper, 100+ models)**\n- Go to Credentials → New → HTTP Header Auth\n- Name: `OpenRouter API Key`\n- Header Name: `Authorization`\n- Header Value: `Bearer sk-or-v1-...`\n- Change URL to: `https://openrouter.ai/api/v1/chat/completions`\n- Change model to: `anthropic/claude-opus-4-6`",
+        "height": 280,
+        "width": 380,
+        "color": 6
+      },
+      "id": "sticky-002",
+      "name": "AI Credential Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [480, -200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "ai_analysis",
+              "value": "={{ (() => { try { return JSON.parse($json.content[0].text) } catch(e) { return { hypothesis: $json.content[0].text, actions: [], severity: 'Unknown', eta: 'Unknown' } } })() }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-002",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [740, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🚨 *Incident Alert: {{ $('Normalize Alert Fields').item.json.alert_title }}*\",\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": { \"type\": \"plain_text\", \"text\": \"🚨 Incident Alert Enriched by AI\" }\n    },\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        { \"type\": \"mrkdwn\", \"text\": \"*Service:*\\n{{ $('Normalize Alert Fields').item.json.alert_service }}\" },\n        { \"type\": \"mrkdwn\", \"text\": \"*Severity:*\\n{{ $json.ai_analysis.severity || $('Normalize Alert Fields').item.json.alert_severity }}\" },\n        { \"type\": \"mrkdwn\", \"text\": \"*ETA to Resolve:*\\n{{ $json.ai_analysis.eta }}\" },\n        { \"type\": \"mrkdwn\", \"text\": \"*Time:*\\n{{ $('Normalize Alert Fields').item.json.alert_timestamp }}\" }\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Root Cause Hypothesis:*\\n{{ $json.ai_analysis.hypothesis }}\" }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Immediate Actions:*\\n• {{ $json.ai_analysis.actions.join('\\n• ') }}\" }\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 80]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {}
+      },
+      "id": "respond-001",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1180, 80]
+    }
+  ],
+  "connections": {
+    "Receive Alert Webhook": {
+      "main": [[{"node": "Normalize Alert Fields", "type": "main", "index": 0}]]
+    },
+    "Normalize Alert Fields": {
+      "main": [[{"node": "Enrich with Claude AI", "type": "main", "index": 0}]]
+    },
+    "Enrich with Claude AI": {
+      "main": [[{"node": "Parse AI Response", "type": "main", "index": 0}]]
+    },
+    "Parse AI Response": {
+      "main": [[{"node": "Post to Slack", "type": "main", "index": 0}]]
+    },
+    "Post to Slack": {
+      "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "flowmindlabs"
+  },
+  "tags": [
+    {"name": "ai-ops"},
+    {"name": "incident-management"},
+    {"name": "flowmindlabs"}
+  ]
+}
