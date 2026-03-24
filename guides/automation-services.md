@@ -94,11 +94,11 @@ Monthly plans include monitoring, updates, and new workflow additions as your ne
 
 ## Why FlowMind Labs?
 
-- **India-first** — built for Indian teams, Indian tools (Razorpay, WhatsApp, Zoho), Indian pricing
-- **AI-powered** — every workflow uses Claude AI for smarter outputs, not just basic automation
-- **We own the tech** — we don't resell Zapier or Make. We run our own infrastructure
-- **Fast turnaround** — first workflow live within 48 hours of onboarding
+- **AI at the core** — every workflow uses Claude AI for smarter outputs, not just basic rule-based automation
+- **Built for growing businesses** — practical automations that save real hours, not demo-ware
+- **Flexible stack** — we work with the tools you already use: Slack, WhatsApp, Gmail, HubSpot, Zoho, Razorpay, and 50+ more
 - **Transparent pricing** — fixed INR pricing, no per-task fees or surprise bills
+- **Hands-on support** — we configure, test, and hand over working workflows with full documentation
 
 ---
 
@@ -114,7 +114,7 @@ Slack, WhatsApp, Telegram, Gmail, Google Sheets, Notion, Zoho, HubSpot, Freshdes
 We can migrate your existing automations and make them smarter with AI — usually at lower cost.
 
 **How long does setup take?**
-Starter package: 48 hours. Growth/Scale: 5–7 business days for initial setup.
+Depends on complexity. Simple workflows typically go live within a few business days. Growth/Scale packages with custom integrations are scoped during the discovery call.
 
 **Is my data safe?**
 Yes. All workflows run on your own n8n instance or ours with strict access controls. We never store your business data.
