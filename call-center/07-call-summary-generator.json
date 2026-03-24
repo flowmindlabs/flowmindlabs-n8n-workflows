@@ -1,0 +1,162 @@
+{
+  "name": "Call Center — Call Summary Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 📞 Call Summary Generator\n\n**What this workflow does:**\nAccepts a call transcript (text) or audio file URL, generates an AI-powered structured summary with action items, sentiment, and CRM-ready notes.\n\n**Setup steps:**\n1. Trigger via webhook POST with transcript text or audio URL\n2. Add Claude API credentials\n3. Optionally connect to CRM (HubSpot/Salesforce) to auto-log call notes\n4. Set Slack webhook to notify the sales/support team\n\n**Payload format:**\n```json\n{\n  \"transcript\": \"Agent: Hello, how can I help?\\nCustomer: ...\",\n  \"agent_name\": \"Priya\",\n  \"customer_name\": \"Rahul\",\n  \"call_duration_mins\": 12,\n  \"call_type\": \"support|sales|onboarding\"\n}\n```\n\n**Tip:** Use Whisper API to transcribe audio first, then feed into this workflow.",
+        "height": 420,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -240]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "call-summary",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "Receive Call Transcript",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 80],
+      "webhookId": "call-summary-generator"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "transcript",
+              "value": "={{ $json.body?.transcript || 'No transcript provided' }}",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "agent_name",
+              "value": "={{ $json.body?.agent_name || 'Unknown Agent' }}",
+              "type": "string"
+            },
+            {
+              "id": "c3",
+              "name": "customer_name",
+              "value": "={{ $json.body?.customer_name || 'Unknown Customer' }}",
+              "type": "string"
+            },
+            {
+              "id": "c4",
+              "name": "call_duration",
+              "value": "={{ $json.body?.call_duration_mins || 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "c5",
+              "name": "call_type",
+              "value": "={{ $json.body?.call_type || 'support' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Extract Call Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 1200,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Analyze this {{ $json.call_type }} call transcript and generate a structured summary.\\n\\nCall Details:\\n- Agent: {{ $json.agent_name }}\\n- Customer: {{ $json.customer_name }}\\n- Duration: {{ $json.call_duration }} minutes\\n- Type: {{ $json.call_type }}\\n\\nTRANSCRIPT:\\n{{ $json.transcript }}\\n\\nGenerate a JSON summary with these exact fields:\\n{\\n  \\\"one_line_summary\\\": \\\"\\\",\\n  \\\"issues_discussed\\\": [],\\n  \\\"resolutions\\\": [],\\n  \\\"action_items\\\": [{\\\"owner\\\": \\\"\\\", \\\"task\\\": \\\"\\\", \\\"due\\\": \\\"\\\"}],\\n  \\\"customer_sentiment\\\": \\\"positive|neutral|negative\\\",\\n  \\\"customer_satisfaction_score\\\": 1-10,\\n  \\\"escalation_needed\\\": true/false,\\n  \\\"escalation_reason\\\": \\\"\\\",\\n  \\\"crm_notes\\\": \\\"CRM-ready paragraph under 100 words\\\",\\n  \\\"follow_up_date\\\": \\\"YYYY-MM-DD or null\\\",\\n  \\\"key_quotes\\\": []\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Claude Summarizes Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json.content[0].text;\nlet summary;\ntry {\n  summary = JSON.parse(raw);\n} catch (e) {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  try { summary = JSON.parse(match[0]); } catch { summary = { one_line_summary: raw.substring(0, 200), issues_discussed: [], resolutions: [], action_items: [], customer_sentiment: 'neutral', customer_satisfaction_score: 5, escalation_needed: false, escalation_reason: '', crm_notes: raw.substring(0, 300), follow_up_date: null, key_quotes: [] }; }\n}\n\nconst call = $('Extract Call Data').first().json;\nreturn [{ json: { ...summary, agent_name: call.agent_name, customer_name: call.customer_name, call_duration: call.call_duration, call_type: call.call_type, generated_at: new Date().toISOString() } }];"
+      },
+      "id": "code-001",
+      "name": "Parse Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\"type\": \"header\", \"text\": {\"type\": \"plain_text\", \"text\": \"📞 Call Summary — {{ $json.customer_name }}\"}},\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\"type\": \"mrkdwn\", \"text\": \"*Agent:*\\n{{ $json.agent_name }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Duration:*\\n{{ $json.call_duration }} mins\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Sentiment:*\\n{{ $json.customer_sentiment }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*CSAT Score:*\\n{{ $json.customer_satisfaction_score }}/10\"}\n      ]\n    },\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Summary:*\\n{{ $json.one_line_summary }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Action Items:*\\n{{ $json.action_items.map(a => `• ${a.owner}: ${a.task}`).join('\\n') }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Escalation Needed:*\\n{{ $json.escalation_needed ? '🔴 YES — ' + $json.escalation_reason : '🟢 No' }}\"}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "Post Summary to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($('Parse Summary').item.json) }}",
+        "options": {}
+      },
+      "id": "respond-001",
+      "name": "Return Summary JSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1180, 80]
+    }
+  ],
+  "connections": {
+    "Receive Call Transcript": {
+      "main": [[{"node": "Extract Call Data", "type": "main", "index": 0}]]
+    },
+    "Extract Call Data": {
+      "main": [[{"node": "Claude Summarizes Call", "type": "main", "index": 0}]]
+    },
+    "Claude Summarizes Call": {
+      "main": [[{"node": "Parse Summary", "type": "main", "index": 0}]]
+    },
+    "Parse Summary": {
+      "main": [[{"node": "Post Summary to Slack", "type": "main", "index": 0}]]
+    },
+    "Post Summary to Slack": {
+      "main": [[{"node": "Return Summary JSON", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "call-center"}, {"name": "call-summary"}, {"name": "flowmindlabs"}]
+}
