@@ -2,7 +2,7 @@
 
 **Production-ready AI automation workflows built by [FlowMind Labs](https://flowmindlabs.com)**
 
-> 26 high-value workflows across AI Ops, Call Center, Business, Content, and OpenClaw — all powered by Claude AI.
+> 30 high-value workflows across AI Ops, Call Center, Business, Content, and OpenClaw — all powered by Claude AI.
 
 ---
 
@@ -69,13 +69,18 @@
 | 13 | [Multi-Channel Support Bot](openclaw/13-openclaw-multichannel-support-bot.json) | AI support bot across Telegram, WhatsApp, Discord, Slack — powered by Claude |
 | 14 | [Voice-to-Task Creator](openclaw/14-openclaw-voice-to-task.json) | WhatsApp/Telegram voice note → transcribe → extract tasks → create in task manager |
 | 15 | [Cron Intelligence Report](openclaw/15-openclaw-cron-intelligence-report.json) | Daily AI briefing delivered to your phone via any OpenClaw channel |
+| 26 | [Morning Briefing](openclaw/26-openclaw-morning-briefing.json) | Daily 7AM — calendar + weather + news → Claude compiles briefing → delivered to your phone |
+| 27 | [Receipt OCR Expense Tracker](openclaw/27-openclaw-receipt-expense-tracker.json) | Send a receipt photo → Claude extracts vendor/amount/date → logged to Airtable + Google Sheets |
+| 28 | [AWS Cost Monitor](openclaw/28-openclaw-aws-cost-monitor.json) | Weekly AWS Cost Explorer pull → Claude analyses spend trends → Slack cost report |
+| 29 | [Competitive Intelligence Monitor](openclaw/29-competitive-intelligence-monitor.json) | Daily competitor page scrape → Claude detects pricing/feature changes → Slack alert |
 
 ### 📖 Guides
 
 | # | Guide | Description |
 |---|-------|-------------|
-| 16 | [OpenClaw VPS Setup](guides/16-openclaw-vps-setup-guide.md) | Complete guide: Hetzner VPS → Ubuntu → OpenClaw → Nginx → SSL → systemd |
+| 16 | [OpenClaw VPS Setup](guides/16-openclaw-vps-setup-guide.md) | Complete guide: Hostinger VPS → Ubuntu → OpenClaw → Nginx → SSL → systemd |
 | 17 | [Automation Services](guides/automation-services.md) | What FlowMind Labs does for you — packages, INR pricing, how to get started |
+| 18 | [OpenClaw Security Guide](guides/openclaw-security.md) | Mandatory reading before deploying OpenClaw — risks, SOUL.md policies, what never to connect |
 
 ---
 
