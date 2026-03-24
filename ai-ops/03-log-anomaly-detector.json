@@ -1,0 +1,157 @@
+{
+  "name": "AI Ops — Log Anomaly Detector",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 🔍 Log Anomaly Detector\n\n**What this workflow does:**\nReceives log batches via webhook (from Filebeat, Fluentd, Logstash, or any log shipper). Claude AI scans for anomalies, errors, or suspicious patterns and posts a structured report to Slack.\n\n**Setup steps:**\n1. Configure your log shipper to POST to this webhook URL\n2. Add Claude API credentials (Header Auth, x-api-key)\n   - OR use OpenRouter with Authorization: Bearer\n3. Set your Slack webhook URL\n4. Adjust `MAX_LOG_LINES` in the Code node if needed (default: 50 lines)\n\n**Compatible log shippers:**\n- Filebeat → Logstash → HTTP Output\n- Fluentd http_output plugin\n- Vector HTTP sink\n- Manual POST for testing",
+        "height": 360,
+        "width": 440,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -220]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "log-anomaly",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "Receive Log Batch",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 80],
+      "webhookId": "log-anomaly-detector"
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Extract and normalize log lines from various shipper formats\nconst body = $input.first().json.body;\nconst MAX_LINES = 50;\n\nlet logLines = [];\n\n// Handle array of log objects (Filebeat/Fluentd format)\nif (Array.isArray(body)) {\n  logLines = body.map(entry => {\n    const msg = entry.message || entry.log || entry['@message'] || JSON.stringify(entry);\n    const ts = entry['@timestamp'] || entry.timestamp || '';\n    const level = entry.level || entry.severity || '';\n    return `[${ts}] [${level}] ${msg}`.trim();\n  });\n} else if (body?.logs) {\n  // Handle {logs: [...]} format\n  logLines = Array.isArray(body.logs) ? body.logs : [body.logs];\n} else if (typeof body === 'string') {\n  // Handle raw text log dump\n  logLines = body.split('\\n').filter(l => l.trim());\n} else {\n  logLines = [JSON.stringify(body)];\n}\n\n// Trim to MAX_LINES most recent\nconst trimmed = logLines.slice(-MAX_LINES);\nconst source = body?.source || body?.[0]?.host?.name || 'unknown-source';\n\nreturn [{\n  json: {\n    log_text: trimmed.join('\\n'),\n    log_count: trimmed.length,\n    source: source,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "code-001",
+      "name": "Normalize Log Lines",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 1024,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"You are a log analysis expert. Analyze these {{ $json.log_count }} log lines from '{{ $json.source }}' and identify:\\n1. Anomalies or unusual patterns\\n2. Errors or exceptions (list each unique one)\\n3. Security concerns (failed logins, suspicious IPs, etc.)\\n4. Performance issues (timeouts, slow queries, etc.)\\n5. Overall health score (0-100)\\n\\nIf no anomalies found, say CLEAN.\\n\\nLOGS:\\n{{ $json.log_text }}\\n\\nRespond in JSON: {\\\"anomalies\\\": [], \\\"errors\\\": [], \\\"security\\\": [], \\\"performance\\\": [], \\\"health_score\\\": 0, \\\"summary\\\": \\\"\\\"}\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Claude Analyzes Logs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const rawText = $input.first().json.content[0].text;\nlet analysis;\ntry {\n  analysis = JSON.parse(rawText);\n} catch (e) {\n  analysis = { anomalies: [], errors: [], security: [], performance: [], health_score: 50, summary: rawText };\n}\n\nconst hasIssues = analysis.anomalies.length > 0 || analysis.errors.length > 0 || analysis.security.length > 0;\nconst healthEmoji = analysis.health_score >= 80 ? '🟢' : analysis.health_score >= 50 ? '🟡' : '🔴';\n\nreturn [{\n  json: {\n    ...analysis,\n    has_issues: hasIssues,\n    health_emoji: healthEmoji,\n    source: $('Normalize Log Lines').first().json.source,\n    log_count: $('Normalize Log Lines').first().json.log_count,\n    timestamp: $('Normalize Log Lines').first().json.timestamp\n  }\n}];"
+      },
+      "id": "code-002",
+      "name": "Parse Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 80]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.has_issues }}",
+              "rightValue": true,
+              "operator": {"type": "boolean", "operation": "true"}
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "if-001",
+      "name": "Issues Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [960, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"{{ $json.health_emoji }} Log Anomalies Detected on {{ $json.source }}\",\n  \"blocks\": [\n    {\"type\": \"header\", \"text\": {\"type\": \"plain_text\", \"text\": \"{{ $json.health_emoji }} Log Analysis Report\"}},\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\"type\": \"mrkdwn\", \"text\": \"*Source:*\\n{{ $json.source }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Health Score:*\\n{{ $json.health_score }}/100\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Lines Analyzed:*\\n{{ $json.log_count }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Time:*\\n{{ $json.timestamp }}\"}\n      ]\n    },\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Summary:*\\n{{ $json.summary }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Errors:*\\n{{ $json.errors.length > 0 ? $json.errors.join('\\n• ') : 'None' }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Security Concerns:*\\n{{ $json.security.length > 0 ? $json.security.join('\\n• ') : 'None' }}\"}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "Alert Slack — Issues Found",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {}
+      },
+      "id": "respond-001",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1400, 80]
+    }
+  ],
+  "connections": {
+    "Receive Log Batch": {
+      "main": [[{"node": "Normalize Log Lines", "type": "main", "index": 0}]]
+    },
+    "Normalize Log Lines": {
+      "main": [[{"node": "Claude Analyzes Logs", "type": "main", "index": 0}]]
+    },
+    "Claude Analyzes Logs": {
+      "main": [[{"node": "Parse Analysis", "type": "main", "index": 0}]]
+    },
+    "Parse Analysis": {
+      "main": [[{"node": "Issues Found?", "type": "main", "index": 0}]]
+    },
+    "Issues Found?": {
+      "main": [
+        [{"node": "Alert Slack — Issues Found", "type": "main", "index": 0}],
+        [{"node": "Respond OK", "type": "main", "index": 0}]
+      ]
+    },
+    "Alert Slack — Issues Found": {
+      "main": [[{"node": "Respond OK", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "ai-ops"}, {"name": "log-analysis"}, {"name": "flowmindlabs"}]
+}
