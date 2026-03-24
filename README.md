@@ -2,7 +2,7 @@
 
 **Production-ready AI automation workflows built by [FlowMind Labs](https://flowmindlabs.com)**
 
-> 17 high-value workflows across AI Ops, Call Center, Business, Content, and OpenClaw — all powered by Claude AI.
+> 18 high-value workflows across AI Ops, Call Center, Business, Content, and OpenClaw — all powered by Claude AI.
 
 ---
 
