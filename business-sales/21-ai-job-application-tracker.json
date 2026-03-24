@@ -1,0 +1,321 @@
+{
+  "name": "21 - AI Job Application Tracker & Follow-up Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 21 - AI Job Application Tracker & Follow-up Bot\n\n**What it does:**\n- Watches Gmail for job application replies\n- Claude classifies each email: Interview / Rejection / Offer / No Response\n- Updates Airtable tracker automatically\n- Drafts a follow-up email if no reply in 7 days\n\n**Setup:**\n1. Configure Google Gmail OAuth2 credentials\n2. Configure Airtable credentials + set AIRTABLE_BASE_ID\n3. Configure OpenRouter/Claude credentials\n4. Create Airtable table `Job Applications` with columns:\n   - Company (text)\n   - Role (text)\n   - Applied Date (date)\n   - Status (single select: Applied/Interview/Offer/Rejected/Withdrawn)\n   - Last Email Date (date)\n   - Follow-up Sent (checkbox)\n   - Notes (long text)\n5. Set the Gmail label filter to match your job application emails",
+        "height": 440,
+        "width": 380
+      },
+      "id": "a1000001-0001-0001-0001-000000000001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, -200]
+    },
+    {
+      "parameters": {
+        "content": "### Part 1: Gmail Watcher\nRuns every 15 mins, classifies new emails",
+        "height": 60,
+        "width": 280
+      },
+      "id": "a1000001-0001-0001-0001-000000000002",
+      "name": "Label 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, 200]
+    },
+    {
+      "parameters": {
+        "content": "### Part 2: Follow-up Check\nRuns daily, finds applications with no reply in 7 days",
+        "height": 60,
+        "width": 300
+      },
+      "id": "a1000001-0001-0001-0001-000000000003",
+      "name": "Label 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, 700]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [{ "mode": "everyX", "value": 15, "unit": "minutes" }]
+        },
+        "filters": {
+          "labelIds": ["INBOX"],
+          "q": "subject:(application OR interview OR offer OR unfortunately OR regret OR position OR role OR thank you for applying)"
+        },
+        "options": { "dataPropertyAttachmentsPrefixName": "" }
+      },
+      "id": "a1000001-0001-0001-0001-000000000004",
+      "name": "Gmail — Watch Job Emails",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmail-cred",
+          "name": "Gmail"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "HTTP-Referer", "value": "flowmindlabs.co" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"anthropic/claude-sonnet-4-6\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an assistant that classifies job application emails. Extract the company name, role, and status. Return ONLY valid JSON in this format:\\n{\\\"company\\\": \\\"Company Name\\\", \\\"role\\\": \\\"Job Title\\\", \\\"status\\\": \\\"Interview|Rejection|Offer|Applied\\\", \\\"summary\\\": \\\"one sentence summary\\\"}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"From: {{ $json.from }}\\nSubject: {{ $json.subject }}\\nBody: {{ $json.text ? $json.text.slice(0, 1000) : $json.snippet }}\"\n    }\n  ],\n  \"max_tokens\": 200\n}",
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000005",
+      "name": "Claude — Classify Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.item.json.choices?.[0]?.message?.content || '{}';\nlet parsed;\ntry {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(match ? match[0] : raw);\n} catch(e) {\n  parsed = { company: 'Unknown', role: 'Unknown', status: 'Applied', summary: raw };\n}\n\nconst emailDate = $('Gmail — Watch Job Emails').item.json.date || new Date().toISOString();\n\nreturn [{ json: {\n  company: parsed.company || 'Unknown',\n  role: parsed.role || 'Unknown',\n  status: parsed.status || 'Applied',\n  summary: parsed.summary || '',\n  email_date: new Date(emailDate).toISOString().split('T')[0],\n  email_from: $('Gmail — Watch Job Emails').item.json.from,\n  email_subject: $('Gmail — Watch Job Emails').item.json.subject\n}}];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000006",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "baseId": "={{ $env.AIRTABLE_BASE_ID }}",
+        "tableId": "Job Applications",
+        "filterByFormula": "=AND({Company}='{{ $json.company }}', {Role}='{{ $json.role }}')",
+        "options": { "maxRecords": 1 }
+      },
+      "id": "a1000001-0001-0001-0001-000000000007",
+      "name": "Find Existing Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [960, 300],
+      "credentials": {
+        "airtableTokenApi": { "id": "airtable-cred", "name": "Airtable API" }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c001",
+              "leftValue": "={{ $json.records ? $json.records.length : 0 }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000008",
+      "name": "New or Existing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "baseId": "={{ $env.AIRTABLE_BASE_ID }}",
+        "tableId": "Job Applications",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Company": "={{ $('Parse Classification').item.json.company }}",
+            "Role": "={{ $('Parse Classification').item.json.role }}",
+            "Status": "={{ $('Parse Classification').item.json.status }}",
+            "Applied Date": "={{ $('Parse Classification').item.json.email_date }}",
+            "Last Email Date": "={{ $('Parse Classification').item.json.email_date }}",
+            "Notes": "={{ $('Parse Classification').item.json.summary }}",
+            "Follow-up Sent": false
+          }
+        },
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000009",
+      "name": "Create Application Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1440, 160],
+      "credentials": {
+        "airtableTokenApi": { "id": "airtable-cred", "name": "Airtable API" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "baseId": "={{ $env.AIRTABLE_BASE_ID }}",
+        "tableId": "Job Applications",
+        "id": "={{ $json.records[0].id }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Status": "={{ $('Parse Classification').item.json.status }}",
+            "Last Email Date": "={{ $('Parse Classification').item.json.email_date }}",
+            "Notes": "={{ $('Parse Classification').item.json.summary }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000010",
+      "name": "Update Application Record",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1440, 440],
+      "credentials": {
+        "airtableTokenApi": { "id": "airtable-cred", "name": "Airtable API" }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }]
+        }
+      },
+      "id": "a1000001-0001-0001-0001-000000000011",
+      "name": "Daily Follow-up Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 800]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "baseId": "={{ $env.AIRTABLE_BASE_ID }}",
+        "tableId": "Job Applications",
+        "filterByFormula": "=AND({Status}='Applied', {Follow-up Sent}=FALSE(), DATETIME_DIFF(TODAY(), {Applied Date}, 'days') >= 7)",
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000012",
+      "name": "Find No-Reply Applications",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [480, 800],
+      "credentials": {
+        "airtableTokenApi": { "id": "airtable-cred", "name": "Airtable API" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "HTTP-Referer", "value": "flowmindlabs.co" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"anthropic/claude-sonnet-4-6\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Write a short, professional follow-up email for a job application. Keep it under 100 words. Polite, confident, not desperate.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"I applied for the {{ $json.records[0].fields.Role }} position at {{ $json.records[0].fields.Company }} on {{ $json.records[0].fields['Applied Date'] }} and haven't heard back. Write a follow-up email.\"\n    }\n  ],\n  \"max_tokens\": 300\n}",
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000013",
+      "name": "Claude — Draft Follow-up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 800],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "createDraft",
+        "subject": "=Following up — {{ $('Find No-Reply Applications').item.json.records[0].fields.Role }} Application",
+        "message": "={{ $json.choices[0].message.content }}",
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000014",
+      "name": "Save as Gmail Draft",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [960, 800],
+      "credentials": {
+        "gmailOAuth2": { "id": "gmail-cred", "name": "Gmail" }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "baseId": "={{ $env.AIRTABLE_BASE_ID }}",
+        "tableId": "Job Applications",
+        "id": "={{ $('Find No-Reply Applications').item.json.records[0].id }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": { "Follow-up Sent": true }
+        },
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000015",
+      "name": "Mark Follow-up Sent",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1200, 800],
+      "credentials": {
+        "airtableTokenApi": { "id": "airtable-cred", "name": "Airtable API" }
+      }
+    }
+  ],
+  "connections": {
+    "Gmail — Watch Job Emails": {
+      "main": [[{ "node": "Claude — Classify Email", "type": "main", "index": 0 }]]
+    },
+    "Claude — Classify Email": {
+      "main": [[{ "node": "Parse Classification", "type": "main", "index": 0 }]]
+    },
+    "Parse Classification": {
+      "main": [[{ "node": "Find Existing Record", "type": "main", "index": 0 }]]
+    },
+    "Find Existing Record": {
+      "main": [[{ "node": "New or Existing?", "type": "main", "index": 0 }]]
+    },
+    "New or Existing?": {
+      "main": [
+        [{ "node": "Create Application Record", "type": "main", "index": 0 }],
+        [{ "node": "Update Application Record", "type": "main", "index": 0 }]
+      ]
+    },
+    "Daily Follow-up Check": {
+      "main": [[{ "node": "Find No-Reply Applications", "type": "main", "index": 0 }]]
+    },
+    "Find No-Reply Applications": {
+      "main": [[{ "node": "Claude — Draft Follow-up", "type": "main", "index": 0 }]]
+    },
+    "Claude — Draft Follow-up": {
+      "main": [[{ "node": "Save as Gmail Draft", "type": "main", "index": 0 }]]
+    },
+    "Save as Gmail Draft": {
+      "main": [[{ "node": "Mark Follow-up Sent", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "createdAt": "2026-03-24T00:00:00.000Z", "updatedAt": "2026-03-24T00:00:00.000Z", "id": "tag-jobs", "name": "productivity" }],
+  "triggerCount": 2,
+  "updatedAt": "2026-03-24T00:00:00.000Z",
+  "versionId": "v1"
+}
