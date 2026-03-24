@@ -2,7 +2,7 @@
 
 **Production-ready AI automation workflows built by [FlowMind Labs](https://flowmindlabs.com)**
 
-> 18 high-value workflows across AI Ops, Call Center, Business, Content, and OpenClaw — all powered by Claude AI.
+> 21 high-value workflows across AI Ops, Call Center, Business, Content, and OpenClaw — all powered by Claude AI.
 
 ---
 
@@ -45,6 +45,9 @@
 |---|----------|-------------|
 | 09 | [Lead Enrichment + Scoring](business-sales/09-lead-enrichment-scoring.json) | Scores new leads 0-100 against your ICP, generates personalized outreach angle |
 | 10 | [AI Meeting Notes](business-sales/10-ai-meeting-notes.json) | Turns meeting transcripts into structured notes, action items, follow-up email |
+| 18 | [E-commerce Order Processing](business-sales/18-ecommerce-order-processing.json) | Shopify order webhook → Airtable inventory sync → customer Gmail confirmation |
+| 19 | [RAG Company Docs Chatbot](business-sales/19-rag-company-docs-chatbot.json) | Google Drive docs → Pinecone vector index → Slack Q&A bot powered by Claude |
+| 20 | [Invoice Generator & Reminder](business-sales/20-invoice-reminder.json) | Daily Stripe overdue check → email reminders → Slack escalation after 2nd reminder |
 
 ### 📱 Content / Marketing
 
