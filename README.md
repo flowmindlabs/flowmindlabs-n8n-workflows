@@ -105,9 +105,42 @@ For Slack notifications in most workflows:
 4. In n8n: Set as a workflow variable `SLACK_WEBHOOK_URL`
 
 ### SMTP (Email)
-For the AI First Response Bot:
+For the AI First Response Bot and Invoice Reminder:
 1. In n8n: **Credentials** → New → **SMTP**
 2. Use Gmail App Password, SendGrid, or Postmark
+
+### Airtable
+For E-commerce Order Processing and Invoice Reminder:
+1. Get API token: [airtable.com/create/tokens](https://airtable.com/create/tokens) → Create token → scope: `data.records:write`
+2. In n8n: **Credentials** → New → **Airtable Personal Access Token**
+3. Paste your token
+4. Update `AIRTABLE_BASE_ID` in the workflow's Config/Set node with your base ID (found in the base URL: `airtable.com/appXXXXXX/...`)
+
+### Stripe
+For Invoice Generator & Reminder:
+1. Get secret key: [dashboard.stripe.com/apikeys](https://dashboard.stripe.com/apikeys)
+2. In n8n: **Credentials** → New → **HTTP Header Auth**
+3. Header Name: `Authorization`
+4. Header Value: `Bearer sk_live_...`
+5. Or set as environment variable `STRIPE_SECRET_KEY` in n8n
+
+### Google Drive
+For RAG Company Docs Chatbot:
+1. In n8n: **Credentials** → New → **Google Drive OAuth2**
+2. Follow the OAuth2 setup wizard — sign in with your Google account
+3. Grant Drive read access
+4. Set your folder ID in the Google Drive trigger node (found in the folder URL: `drive.google.com/drive/folders/FOLDER_ID`)
+
+### Pinecone
+For RAG Company Docs Chatbot:
+1. Sign up at [pinecone.io](https://www.pinecone.io) → create an index
+2. Index settings: **Dimensions: 1536**, **Metric: cosine**
+3. Get API key from Pinecone dashboard
+4. Set environment variables in n8n:
+   - `PINECONE_API_KEY` — your API key
+   - `PINECONE_INDEX` — your index name
+   - `PINECONE_PROJECT` — your project ID
+   - `PINECONE_ENV` — your environment (e.g. `us-east-1-aws`)
 
 ---
 
