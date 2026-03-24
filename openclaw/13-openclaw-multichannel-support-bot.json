@@ -1,0 +1,259 @@
+{
+  "name": "OpenClaw — Multi-Channel Support Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 🦞 OpenClaw Multi-Channel Support Bot\n\n**What this workflow does:**\nConnects OpenClaw (your self-hosted AI assistant) to receive messages from any of its 20+ integrated channels (Telegram, WhatsApp, Discord, Slack, Teams, etc.) and responds with AI-powered answers using Claude.\n\n**Prerequisites:**\n- OpenClaw installed and running (see workflow 16 for VPS setup)\n- OpenClaw WebSocket gateway running on ws://127.0.0.1:18789\n- Claude API key or OpenRouter key\n\n**Setup steps:**\n1. Install OpenClaw: `npm install -g openclaw` then `openclaw start`\n2. In OpenClaw settings, set webhook output to this n8n webhook URL\n3. Add Claude API credentials to the AI Response node\n4. Edit the `Bot Persona` node to set your bot's name and knowledge base\n5. OpenClaw handles delivery back to the channel automatically\n\n**OpenClaw docs:** https://github.com/openclaw/openclaw",
+        "height": 420,
+        "width": 480,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -260]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "openclaw-message",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "OpenClaw Message In",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 80],
+      "webhookId": "openclaw-support-bot"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bp1",
+              "name": "bot_name",
+              "value": "FlowBot",
+              "type": "string"
+            },
+            {
+              "id": "bp2",
+              "name": "company",
+              "value": "FlowMind Labs",
+              "type": "string"
+            },
+            {
+              "id": "bp3",
+              "name": "bot_role",
+              "value": "Customer support and product assistant for FlowMind Labs automation workflows",
+              "type": "string"
+            },
+            {
+              "id": "bp4",
+              "name": "knowledge_base",
+              "value": "- We build n8n automation workflows\n- Products: AI Ops, Call Center, Business, Content, and OpenClaw workflow packs\n- Pricing: Free workflows on GitHub, Premium packs from $49\n- Support: support@flowmindlabs.com\n- Docs: docs.flowmindlabs.com\n- For workflow customization: hello@flowmindlabs.com",
+              "type": "string"
+            },
+            {
+              "id": "bp5",
+              "name": "tone",
+              "value": "Friendly, helpful, concise. Never more than 3 paragraphs. Use plain language.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Bot Persona — Edit This",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "m1",
+              "name": "user_message",
+              "value": "={{ $('OpenClaw Message In').item.json.body?.message || $('OpenClaw Message In').item.json.body?.text || $('OpenClaw Message In').item.json.body?.content || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "m2",
+              "name": "user_name",
+              "value": "={{ $('OpenClaw Message In').item.json.body?.user?.name || $('OpenClaw Message In').item.json.body?.from || 'User' }}",
+              "type": "string"
+            },
+            {
+              "id": "m3",
+              "name": "channel",
+              "value": "={{ $('OpenClaw Message In').item.json.body?.channel || $('OpenClaw Message In').item.json.body?.platform || 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "m4",
+              "name": "session_id",
+              "value": "={{ $('OpenClaw Message In').item.json.body?.session_id || $('OpenClaw Message In').item.json.body?.chat_id || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "m5",
+              "name": "reply_to",
+              "value": "={{ $('OpenClaw Message In').item.json.body?.reply_url || $('OpenClaw Message In').item.json.body?.webhook || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-002",
+      "name": "Extract Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [520, 80]
+    },
+    {
+      "parameters": {
+        "content": "## 💡 OpenClaw Integration Notes\n\nOpenClaw sends messages via webhook to n8n.\nThis workflow:\n1. Receives the message\n2. Generates AI response\n3. Posts reply back to OpenClaw's reply webhook\n\nOpenClaw then delivers to the right channel (Telegram, WhatsApp, etc.)\n\n**WebSocket alternative:**\nFor real-time, use n8n's WebSocket node pointed at `ws://127.0.0.1:18789`",
+        "height": 260,
+        "width": 360,
+        "color": 5
+      },
+      "id": "sticky-002",
+      "name": "OpenClaw Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [480, -220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 600,\n  \"system\": \"You are {{ $('Bot Persona — Edit This').item.json.bot_name }}, {{ $('Bot Persona — Edit This').item.json.bot_role }} at {{ $('Bot Persona — Edit This').item.json.company }}.\\n\\nKnowledge base:\\n{{ $('Bot Persona — Edit This').item.json.knowledge_base }}\\n\\nTone: {{ $('Bot Persona — Edit This').item.json.tone }}\\n\\nIf you don't know something, say so honestly and direct them to support@flowmindlabs.com.\",\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"{{ $json.user_name }} says: {{ $json.user_message }}\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Claude Generates Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "reply_text",
+              "value": "={{ $json.content[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-003",
+      "name": "Extract Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [960, 80]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $('Extract Message').item.json.reply_to }}",
+              "rightValue": "",
+              "operator": {"type": "string", "operation": "notEmpty"}
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "if-001",
+      "name": "Has Reply URL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1180, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Extract Message').item.json.reply_to }}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"session_id\": \"{{ $('Extract Message').item.json.session_id }}\",\n  \"channel\": \"{{ $('Extract Message').item.json.channel }}\",\n  \"message\": \"{{ $json.reply_text }}\",\n  \"bot_name\": \"{{ $('Bot Persona — Edit This').item.json.bot_name }}\"\n}",
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "Send Reply via OpenClaw",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({reply: $('Extract Reply').item.json.reply_text, session_id: $('Extract Message').item.json.session_id}) }}",
+        "options": {}
+      },
+      "id": "respond-001",
+      "name": "Return Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1600, 80]
+    }
+  ],
+  "connections": {
+    "OpenClaw Message In": {
+      "main": [[{"node": "Bot Persona — Edit This", "type": "main", "index": 0}]]
+    },
+    "Bot Persona — Edit This": {
+      "main": [[{"node": "Extract Message", "type": "main", "index": 0}]]
+    },
+    "Extract Message": {
+      "main": [[{"node": "Claude Generates Reply", "type": "main", "index": 0}]]
+    },
+    "Claude Generates Reply": {
+      "main": [[{"node": "Extract Reply", "type": "main", "index": 0}]]
+    },
+    "Extract Reply": {
+      "main": [[{"node": "Has Reply URL?", "type": "main", "index": 0}]]
+    },
+    "Has Reply URL?": {
+      "main": [
+        [{"node": "Send Reply via OpenClaw", "type": "main", "index": 0}],
+        [{"node": "Return Reply", "type": "main", "index": 0}]
+      ]
+    },
+    "Send Reply via OpenClaw": {
+      "main": [[{"node": "Return Reply", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "openclaw"}, {"name": "chatbot"}, {"name": "flowmindlabs"}]
+}
