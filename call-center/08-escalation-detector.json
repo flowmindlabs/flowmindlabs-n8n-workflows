@@ -1,0 +1,190 @@
+{
+  "name": "Call Center — Escalation Detector",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 🚨 Escalation Detector\n\n**What this workflow does:**\nMonitors incoming messages, tickets, or chat transcripts in real-time. Detects escalation signals (anger, churn risk, legal threats, exec mentions) and immediately alerts the manager with context and recommended action.\n\n**Setup steps:**\n1. Connect your live chat/helpdesk webhook\n2. Add Claude API credentials\n3. Set manager Slack/email notification destination\n4. Tune `ESCALATION_THRESHOLD` in the Code node (default: 6/10)\n\n**Escalation signals Claude detects:**\n- Anger or abusive language\n- Churn threats (\"cancel\", \"refund\", \"lawyer\")\n- Executive mentions (\"CEO\", \"VP\", \"board\")\n- Repeated contact (same issue >3 times)\n- Revenue impact > threshold",
+        "height": 360,
+        "width": 440,
+        "color": 7
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -220]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "escalation-detector",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "Incoming Message",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 80],
+      "webhookId": "escalation-detector"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e1",
+              "name": "message_text",
+              "value": "={{ $json.body?.message || $json.body?.description || $json.body?.body || $json.body?.content || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "e2",
+              "name": "customer_name",
+              "value": "={{ $json.body?.customer_name || $json.body?.requester?.name || 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "e3",
+              "name": "ticket_id",
+              "value": "={{ $json.body?.id || $json.body?.ticket_id || 'N/A' }}",
+              "type": "string"
+            },
+            {
+              "id": "e4",
+              "name": "channel",
+              "value": "={{ $json.body?.channel || 'support' }}",
+              "type": "string"
+            },
+            {
+              "id": "e5",
+              "name": "previous_contacts",
+              "value": "={{ $json.body?.previous_contact_count || 0 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Extract Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 700,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"You are a customer success expert. Analyze this customer message for escalation signals.\\n\\nCustomer: {{ $json.customer_name }}\\nChannel: {{ $json.channel }}\\nPrevious contacts on same issue: {{ $json.previous_contacts }}\\n\\nMESSAGE:\\n{{ $json.message_text }}\\n\\nDetect:\\n1. Anger/frustration level (0-10)\\n2. Churn risk signals (refund/cancel/competitor mentions)\\n3. Legal/executive escalation signals\\n4. Revenue impact likelihood\\n5. Overall escalation score (0-10)\\n\\nReturn JSON:\\n{\\n  \\\"escalation_score\\\": 0-10,\\n  \\\"should_escalate\\\": true/false,\\n  \\\"anger_level\\\": 0-10,\\n  \\\"churn_risk\\\": \\\"low|medium|high\\\",\\n  \\\"signals_detected\\\": [],\\n  \\\"recommended_action\\\": \\\"\\\",\\n  \\\"manager_briefing\\\": \\\"2-3 sentence brief for manager\\\",\\n  \\\"suggested_agent_response\\\": \\\"\\\"\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Claude Detects Escalation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const ESCALATION_THRESHOLD = 6; // Change this to tune sensitivity\nconst raw = $input.first().json.content[0].text;\nlet analysis;\ntry {\n  analysis = JSON.parse(raw);\n} catch (e) {\n  const m = raw.match(/\\{[\\s\\S]*\\}/);\n  try { analysis = JSON.parse(m[0]); } catch { analysis = { escalation_score: 5, should_escalate: false, anger_level: 3, churn_risk: 'medium', signals_detected: [], recommended_action: 'Review manually', manager_briefing: raw.substring(0, 200), suggested_agent_response: '' }; }\n}\n\nconst input = $('Extract Message').first().json;\nconst forceEscalate = input.previous_contacts >= 3 || analysis.escalation_score >= ESCALATION_THRESHOLD;\n\nreturn [{ json: {\n  ...analysis,\n  should_escalate: forceEscalate,\n  customer_name: input.customer_name,\n  ticket_id: input.ticket_id,\n  channel: input.channel,\n  previous_contacts: input.previous_contacts,\n  timestamp: new Date().toISOString()\n}}];"
+      },
+      "id": "code-001",
+      "name": "Evaluate Escalation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 80]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.should_escalate }}",
+              "rightValue": true,
+              "operator": {"type": "boolean", "operation": "true"}
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "if-001",
+      "name": "Should Escalate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [960, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🚨 ESCALATION ALERT — {{ $json.customer_name }}\",\n  \"blocks\": [\n    {\"type\": \"header\", \"text\": {\"type\": \"plain_text\", \"text\": \"🚨 Escalation Alert — Manager Action Required\"}},\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\"type\": \"mrkdwn\", \"text\": \"*Customer:*\\n{{ $json.customer_name }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Ticket:*\\n#{{ $json.ticket_id }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Escalation Score:*\\n{{ $json.escalation_score }}/10\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Churn Risk:*\\n{{ $json.churn_risk }}\"}\n      ]\n    },\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Signals:*\\n• {{ $json.signals_detected.join('\\n• ') }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Manager Brief:*\\n{{ $json.manager_briefing }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Recommended Action:*\\n{{ $json.recommended_action }}\"}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "Alert Manager — Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({escalated: $('Evaluate Escalation').item.json.should_escalate, score: $('Evaluate Escalation').item.json.escalation_score}) }}",
+        "options": {}
+      },
+      "id": "respond-001",
+      "name": "Return Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1400, 80]
+    }
+  ],
+  "connections": {
+    "Incoming Message": {
+      "main": [[{"node": "Extract Message", "type": "main", "index": 0}]]
+    },
+    "Extract Message": {
+      "main": [[{"node": "Claude Detects Escalation", "type": "main", "index": 0}]]
+    },
+    "Claude Detects Escalation": {
+      "main": [[{"node": "Evaluate Escalation", "type": "main", "index": 0}]]
+    },
+    "Evaluate Escalation": {
+      "main": [[{"node": "Should Escalate?", "type": "main", "index": 0}]]
+    },
+    "Should Escalate?": {
+      "main": [
+        [{"node": "Alert Manager — Slack", "type": "main", "index": 0}],
+        [{"node": "Return Result", "type": "main", "index": 0}]
+      ]
+    },
+    "Alert Manager — Slack": {
+      "main": [[{"node": "Return Result", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "call-center"}, {"name": "escalation"}, {"name": "flowmindlabs"}]
+}
