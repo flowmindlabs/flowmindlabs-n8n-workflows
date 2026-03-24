@@ -1,0 +1,204 @@
+{
+  "name": "OpenClaw — Cron Intelligence Report",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 📊 OpenClaw Cron Intelligence Report\n\n**What this workflow does:**\nRuns daily at 8am. Gathers key business metrics from multiple sources (GitHub, Slack activity, server health, support tickets), asks Claude to synthesize them into an executive intelligence report, and delivers it via OpenClaw to your preferred channel (WhatsApp, Telegram, Slack, etc.).\n\n**Setup steps:**\n1. Add Claude API credentials\n2. Configure your data sources in the `Data Sources` node\n   - GitHub repo stats (optional)\n   - Custom API endpoints\n3. Set your OpenClaw delivery channel in the `Delivery Config` node\n4. Add any API credentials needed for your data sources\n5. Activate — runs daily at 8am local time\n\n**Customize:** Add/remove data sources in the Code node. The more context you give Claude, the better the report.",
+        "height": 400,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -260]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-001",
+      "name": "Daily 8am Report",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [80, 80]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d1",
+              "name": "openclaw_webhook",
+              "value": "http://127.0.0.1:18789/send",
+              "type": "string"
+            },
+            {
+              "id": "d2",
+              "name": "delivery_channel",
+              "value": "telegram",
+              "type": "string"
+            },
+            {
+              "id": "d3",
+              "name": "delivery_to",
+              "value": "your-telegram-chat-id",
+              "type": "string"
+            },
+            {
+              "id": "d4",
+              "name": "report_name",
+              "value": "FlowMind Daily Intelligence Brief",
+              "type": "string"
+            },
+            {
+              "id": "d5",
+              "name": "recipient_name",
+              "value": "Founder",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Delivery Config — Edit This",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Gather all available metrics\n// Add your own data sources here\nconst today = new Date().toISOString().split('T')[0];\nconst yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];\n\n// Placeholder metrics — replace with real API calls in separate nodes\nconst metrics = {\n  date: today,\n  system_health: {\n    note: 'Add your monitoring API call in a separate HTTP node and merge here'\n  },\n  business_metrics: {\n    note: 'Add Stripe/Paddle revenue API call here'\n  },\n  github_activity: {\n    note: 'Add GitHub API call here: GET /repos/owner/repo/stats/commit_activity'\n  },\n  support_queue: {\n    note: 'Add Freshdesk/Zendesk API call here'\n  },\n  custom_data: {\n    note: 'Add any custom metrics from your databases or APIs'\n  }\n};\n\nreturn [{ json: { metrics_json: JSON.stringify(metrics, null, 2), date: today } }];"
+      },
+      "id": "code-001",
+      "name": "Gather Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 80]
+    },
+    {
+      "parameters": {
+        "content": "## 📡 Add Your Data Sources Here\n\nBetween `Delivery Config` and `Gather Metrics`, add HTTP nodes to pull real data:\n\n1. **GitHub commits:** `GET https://api.github.com/repos/yourorg/repo/commits`\n2. **Stripe revenue:** `GET https://api.stripe.com/v1/charges` (with API key)\n3. **Server uptime:** `GET https://your-status-page/api`\n4. **Freshdesk tickets:** `GET https://yoursite.freshdesk.com/api/v2/tickets`\n\nThen merge results in the `Gather Metrics` Code node.",
+        "height": 280,
+        "width": 380,
+        "color": 3
+      },
+      "id": "sticky-002",
+      "name": "Data Source Guide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [480, -240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 1000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"You are an executive business intelligence assistant. Generate a daily briefing for {{ $('Delivery Config — Edit This').item.json.recipient_name }}.\\n\\nDate: {{ $json.date }}\\n\\nMETRICS DATA:\\n{{ $json.metrics_json }}\\n\\nGenerate a concise daily intelligence report in this format:\\n\\n📊 *DAILY BRIEF — {{ $json.date }}*\\n\\n⚡ **TOP 3 PRIORITIES TODAY:**\\n1. ...\\n2. ...\\n3. ...\\n\\n📈 **KEY METRICS:**\\n(summarize what's up, what's down)\\n\\n⚠️ **WATCH LIST:**\\n(anything needing attention)\\n\\n✅ **WINS FROM YESTERDAY:**\\n(positive signals)\\n\\n💡 **ONE INSIGHT:**\\n(strategic observation)\\n\\nKeep it under 300 words. Plain text with minimal formatting for messaging apps.\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Claude Writes Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "report_text",
+              "value": "={{ $json.content[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-002",
+      "name": "Extract Report",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [960, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Delivery Config — Edit This').item.json.openclaw_webhook }}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"{{ $('Delivery Config — Edit This').item.json.delivery_channel }}\",\n  \"to\": \"{{ $('Delivery Config — Edit This').item.json.delivery_to }}\",\n  \"message\": \"{{ $json.report_text }}\"\n}",
+        "options": {},
+        "continueOnFail": true
+      },
+      "id": "http-002",
+      "name": "Deliver via OpenClaw",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "specifyBody": "json",
+        "jsonBody": "={\"text\": \"{{ $('Extract Report').item.json.report_text }}\"}",
+        "options": {}
+      },
+      "id": "http-003",
+      "name": "Also Post to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 80]
+    }
+  ],
+  "connections": {
+    "Daily 8am Report": {
+      "main": [[{"node": "Delivery Config — Edit This", "type": "main", "index": 0}]]
+    },
+    "Delivery Config — Edit This": {
+      "main": [[{"node": "Gather Metrics", "type": "main", "index": 0}]]
+    },
+    "Gather Metrics": {
+      "main": [[{"node": "Claude Writes Report", "type": "main", "index": 0}]]
+    },
+    "Claude Writes Report": {
+      "main": [[{"node": "Extract Report", "type": "main", "index": 0}]]
+    },
+    "Extract Report": {
+      "main": [[{"node": "Deliver via OpenClaw", "type": "main", "index": 0}]]
+    },
+    "Deliver via OpenClaw": {
+      "main": [[{"node": "Also Post to Slack", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "openclaw"}, {"name": "reporting"}, {"name": "flowmindlabs"}]
+}
