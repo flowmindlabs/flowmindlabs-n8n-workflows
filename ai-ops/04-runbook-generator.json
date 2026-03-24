@@ -1,0 +1,190 @@
+{
+  "name": "AI Ops — Runbook Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 📖 AI Runbook Generator\n\n**What this workflow does:**\nGiven an incident title and system description, Claude generates a complete operational runbook with diagnosis steps, commands, rollback procedures, and escalation paths. Saves to a Notion page (or posts to Slack).\n\n**Setup steps:**\n1. Trigger via webhook POST or test manually\n2. Add Claude API credentials\n3. **For Notion output:** Add Notion credentials + set `NOTION_DATABASE_ID` in the Set node\n4. **For Slack-only output:** Disable the Notion node, use Slack webhook\n\n**Payload format for webhook trigger:**\n```json\n{\n  \"incident_type\": \"Database connection pool exhausted\",\n  \"system\": \"PostgreSQL 14 on AWS RDS\",\n  \"team\": \"Platform Engineering\",\n  \"severity\": \"P1\"\n}\n```",
+        "height": 380,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -220]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "runbook-generator",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "Trigger: Generate Runbook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 80],
+      "webhookId": "runbook-generator"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "incident_type",
+              "value": "={{ $json.body?.incident_type || 'Unknown incident' }}",
+              "type": "string"
+            },
+            {
+              "id": "r2",
+              "name": "system",
+              "value": "={{ $json.body?.system || 'Unknown system' }}",
+              "type": "string"
+            },
+            {
+              "id": "r3",
+              "name": "team",
+              "value": "={{ $json.body?.team || 'Operations' }}",
+              "type": "string"
+            },
+            {
+              "id": "r4",
+              "name": "severity",
+              "value": "={{ $json.body?.severity || 'P2' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Extract Params",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 2048,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Generate a complete operational runbook for the following incident.\\n\\nIncident: {{ $json.incident_type }}\\nSystem: {{ $json.system }}\\nTeam: {{ $json.team }}\\nSeverity: {{ $json.severity }}\\n\\nThe runbook must include:\\n1. **Overview** — What is happening and why it matters\\n2. **Symptoms** — How to confirm this is the issue (list 4-6 observable symptoms)\\n3. **Prerequisites** — Access, tools, and permissions needed\\n4. **Diagnosis Steps** — Step-by-step numbered commands to diagnose\\n5. **Resolution Steps** — Step-by-step numbered fix commands\\n6. **Rollback Procedure** — How to safely undo the fix if it makes things worse\\n7. **Verification** — How to confirm the issue is resolved\\n8. **Escalation Path** — Who to contact if this doesn't work\\n9. **Prevention** — What to do to prevent recurrence\\n\\nUse markdown formatting. Include real shell commands where applicable.\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Generate Runbook with Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "rb1",
+              "name": "runbook_content",
+              "value": "={{ $json.content[0].text }}",
+              "type": "string"
+            },
+            {
+              "id": "rb2",
+              "name": "runbook_title",
+              "value": "=Runbook: {{ $('Extract Params').item.json.incident_type }} [{{ $('Extract Params').item.json.severity }}]",
+              "type": "string"
+            },
+            {
+              "id": "rb3",
+              "name": "created_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-002",
+      "name": "Prepare Runbook",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [740, 80]
+    },
+    {
+      "parameters": {
+        "content": "## 📋 Output Options\n\n**Option A: Notion (recommended)**\n- Add Notion credentials\n- Set your Database ID in the Notion node\n- Each runbook becomes a Notion page\n\n**Option B: Slack**\n- Disable Notion node\n- Enable Slack HTTP node\n- Paste runbook as formatted message\n\n**Option C: Save to file**\n- Use the Write Binary File node\n- Save as .md file to shared drive",
+        "height": 260,
+        "width": 340,
+        "color": 3
+      },
+      "id": "sticky-002",
+      "name": "Output Options",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [700, -200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"📖 Runbook Generated: {{ $json.runbook_title }}\",\n  \"blocks\": [\n    {\"type\": \"header\", \"text\": {\"type\": \"plain_text\", \"text\": \"📖 New Runbook Generated\"}},\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\"type\": \"mrkdwn\", \"text\": \"*Title:*\\n{{ $json.runbook_title }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Created:*\\n{{ $json.created_at }}\"}\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\"type\": \"mrkdwn\", \"text\": \"{{ $json.runbook_content.substring(0, 2900) }}...\"}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "Post Runbook to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({success: true, title: $('Prepare Runbook').item.json.runbook_title}) }}",
+        "options": {}
+      },
+      "id": "respond-001",
+      "name": "Return Runbook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1180, 80]
+    }
+  ],
+  "connections": {
+    "Trigger: Generate Runbook": {
+      "main": [[{"node": "Extract Params", "type": "main", "index": 0}]]
+    },
+    "Extract Params": {
+      "main": [[{"node": "Generate Runbook with Claude", "type": "main", "index": 0}]]
+    },
+    "Generate Runbook with Claude": {
+      "main": [[{"node": "Prepare Runbook", "type": "main", "index": 0}]]
+    },
+    "Prepare Runbook": {
+      "main": [[{"node": "Post Runbook to Slack", "type": "main", "index": 0}]]
+    },
+    "Post Runbook to Slack": {
+      "main": [[{"node": "Return Runbook", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "ai-ops"}, {"name": "runbook"}, {"name": "flowmindlabs"}]
+}
