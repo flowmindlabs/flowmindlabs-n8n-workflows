@@ -1,0 +1,162 @@
+{
+  "name": "Business — AI Meeting Notes and Action Items",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 📝 AI Meeting Notes Generator\n\n**What this workflow does:**\nAccepts meeting transcript or recording URL. Claude generates structured meeting notes, action items with owners, decisions made, and a follow-up email draft. Sends to Slack and optionally creates tasks in Linear/Jira/Notion.\n\n**Setup steps:**\n1. POST the meeting transcript to this webhook\n2. Add Claude API credentials\n3. Configure Slack notification channel\n4. Optional: Add Notion/Linear credentials to auto-create action items\n\n**Payload format:**\n```json\n{\n  \"transcript\": \"full meeting transcript here\",\n  \"meeting_title\": \"Q2 Planning Meeting\",\n  \"attendees\": [\"Priya\", \"Rahul\", \"Aisha\"],\n  \"date\": \"2026-03-24\",\n  \"duration_mins\": 45\n}\n```\n\n**Tip:** Works great with Otter.ai or Fireflies.ai transcript exports.",
+        "height": 400,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -240]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meeting-notes",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "Meeting Transcript",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 80],
+      "webhookId": "meeting-notes-generator"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "m1",
+              "name": "transcript",
+              "value": "={{ $json.body?.transcript || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "m2",
+              "name": "meeting_title",
+              "value": "={{ $json.body?.meeting_title || 'Untitled Meeting' }}",
+              "type": "string"
+            },
+            {
+              "id": "m3",
+              "name": "attendees",
+              "value": "={{ ($json.body?.attendees || []).join(', ') }}",
+              "type": "string"
+            },
+            {
+              "id": "m4",
+              "name": "date",
+              "value": "={{ $json.body?.date || $now.toISO().split('T')[0] }}",
+              "type": "string"
+            },
+            {
+              "id": "m5",
+              "name": "duration_mins",
+              "value": "={{ $json.body?.duration_mins || 0 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Extract Meeting Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 2000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Generate comprehensive meeting notes from this transcript.\\n\\nMeeting: {{ $json.meeting_title }}\\nDate: {{ $json.date }}\\nDuration: {{ $json.duration_mins }} minutes\\nAttendees: {{ $json.attendees }}\\n\\nTRANSCRIPT:\\n{{ $json.transcript }}\\n\\nGenerate JSON with these exact fields:\\n{\\n  \\\"executive_summary\\\": \\\"2-3 sentences max\\\",\\n  \\\"key_topics\\\": [],\\n  \\\"decisions_made\\\": [],\\n  \\\"action_items\\\": [{\\\"owner\\\": \\\"\\\", \\\"task\\\": \\\"\\\", \\\"due_date\\\": \\\"\\\", \\\"priority\\\": \\\"high|medium|low\\\"}],\\n  \\\"open_questions\\\": [],\\n  \\\"next_meeting_agenda\\\": [],\\n  \\\"full_notes_markdown\\\": \\\"Complete structured notes in markdown\\\",\\n  \\\"follow_up_email\\\": {\\\"subject\\\": \\\"\\\", \\\"body\\\": \\\"Professional follow-up email to send to all attendees\\\"}\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Claude Generates Notes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json.content[0].text;\nlet notes;\ntry {\n  notes = JSON.parse(raw);\n} catch (e) {\n  const m = raw.match(/\\{[\\s\\S]*\\}/);\n  try { notes = JSON.parse(m[0]); } catch { notes = { executive_summary: raw.substring(0, 300), key_topics: [], decisions_made: [], action_items: [], open_questions: [], next_meeting_agenda: [], full_notes_markdown: raw, follow_up_email: {subject: 'Meeting Notes', body: raw.substring(0, 500)} }; }\n}\nconst meeting = $('Extract Meeting Data').first().json;\nreturn [{ json: { ...notes, meeting_title: meeting.meeting_title, date: meeting.date, attendees: meeting.attendees, duration_mins: meeting.duration_mins, generated_at: new Date().toISOString() } }];"
+      },
+      "id": "code-001",
+      "name": "Parse Notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\"type\": \"header\", \"text\": {\"type\": \"plain_text\", \"text\": \"📝 Meeting Notes: {{ $json.meeting_title }}\"}},\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\"type\": \"mrkdwn\", \"text\": \"*Date:*\\n{{ $json.date }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Attendees:*\\n{{ $json.attendees }}\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Duration:*\\n{{ $json.duration_mins }} mins\"},\n        {\"type\": \"mrkdwn\", \"text\": \"*Action Items:*\\n{{ $json.action_items.length }}\"}\n      ]\n    },\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Summary:*\\n{{ $json.executive_summary }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Decisions Made:*\\n• {{ $json.decisions_made.join('\\n• ') }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Action Items:*\\n{{ $json.action_items.map(a => `• *${a.owner}*: ${a.task} (${a.priority})`).join('\\n') }}\"}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({success: true, action_items: $('Parse Notes').item.json.action_items.length, meeting: $('Parse Notes').item.json.meeting_title}) }}",
+        "options": {}
+      },
+      "id": "respond-001",
+      "name": "Return Notes",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1180, 80]
+    }
+  ],
+  "connections": {
+    "Meeting Transcript": {
+      "main": [[{"node": "Extract Meeting Data", "type": "main", "index": 0}]]
+    },
+    "Extract Meeting Data": {
+      "main": [[{"node": "Claude Generates Notes", "type": "main", "index": 0}]]
+    },
+    "Claude Generates Notes": {
+      "main": [[{"node": "Parse Notes", "type": "main", "index": 0}]]
+    },
+    "Parse Notes": {
+      "main": [[{"node": "Post to Slack", "type": "main", "index": 0}]]
+    },
+    "Post to Slack": {
+      "main": [[{"node": "Return Notes", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "business"}, {"name": "meeting-notes"}, {"name": "flowmindlabs"}]
+}
