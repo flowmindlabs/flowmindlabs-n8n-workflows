@@ -1,0 +1,208 @@
+{
+  "name": "Content — Newsletter Digest Builder",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 📧 Newsletter Digest Builder\n\n**What this workflow does:**\nRuns weekly. Fetches RSS feeds from your favorite sources, Claude curates and summarizes the top stories, then generates a ready-to-send newsletter digest and posts a preview to Slack.\n\n**Setup steps:**\n1. Edit the `RSS Feeds` node — replace with your source URLs\n2. Add Claude API credentials\n3. Set your Slack webhook for the preview\n4. Optional: Add email credentials to send via SMTP\n5. Schedule: currently runs every Monday at 8am — change the cron in `Weekly Schedule`\n\n**Default RSS sources (replace with yours):**\n- TechCrunch, Product Hunt, Hacker News\n- Your industry-specific feeds\n- Competitor blogs\n\n**Customize:** Change newsletter topic, target audience, and format in the `Newsletter Config` node.",
+        "height": 400,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -240]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "cron-001",
+      "name": "Weekly Schedule — Monday 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [80, 80]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "nc1",
+              "name": "newsletter_name",
+              "value": "FlowMind Weekly",
+              "type": "string"
+            },
+            {
+              "id": "nc2",
+              "name": "target_audience",
+              "value": "Startup founders, product managers, and developers interested in AI automation",
+              "type": "string"
+            },
+            {
+              "id": "nc3",
+              "name": "topics_focus",
+              "value": "AI tools, automation, n8n workflows, no-code tools, startup growth, developer tools",
+              "type": "string"
+            },
+            {
+              "id": "nc4",
+              "name": "max_stories",
+              "value": 8,
+              "type": "number"
+            },
+            {
+              "id": "nc5",
+              "name": "rss_feeds",
+              "value": "=[\n  \"https://techcrunch.com/feed/\",\n  \"https://news.ycombinator.com/rss\",\n  \"https://www.producthunt.com/feed\",\n  \"https://feeds.feedburner.com/venturebeat/SZYF\"\n]",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Newsletter Config — Edit This",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "rss_feeds",
+        "options": {}
+      },
+      "id": "split-001",
+      "name": "Split Feeds",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [520, 80]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json }}",
+        "options": {}
+      },
+      "id": "rss-001",
+      "name": "Fetch RSS Feed",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.1,
+      "position": [740, 80]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {
+          "mergeLists": true
+        }
+      },
+      "id": "agg-001",
+      "name": "Aggregate All Articles",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [960, 80]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Take all RSS items, pick most recent N stories, format for Claude\nconst MAX_STORIES = 20;\nconst items = $input.first().json.data || [];\n\n// Sort by pubDate descending, take top MAX_STORIES\nconst sorted = items\n  .filter(i => i.title && i.link)\n  .sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0))\n  .slice(0, MAX_STORIES);\n\nconst articleList = sorted.map((item, i) => \n  `${i + 1}. TITLE: ${item.title}\\n   URL: ${item.link}\\n   DATE: ${item.pubDate || 'Unknown'}\\n   SUMMARY: ${(item.contentSnippet || item.content || '').substring(0, 200)}`\n).join('\\n\\n');\n\nreturn [{ json: { article_list: articleList, total_fetched: sorted.length } }];"
+      },
+      "id": "code-001",
+      "name": "Prepare Articles for Claude",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 2500,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"You are the editor of {{ $('Newsletter Config — Edit This').item.json.newsletter_name }}, a weekly digest for {{ $('Newsletter Config — Edit This').item.json.target_audience }}.\\n\\nFocus topics: {{ $('Newsletter Config — Edit This').item.json.topics_focus }}\\n\\nHere are {{ $json.total_fetched }} articles from this week. Select the top {{ $('Newsletter Config — Edit This').item.json.max_stories }} most relevant and valuable ones. For irrelevant articles, skip them.\\n\\nARTICLES:\\n{{ $json.article_list }}\\n\\nGenerate a newsletter digest JSON:\\n{\\n  \\\"newsletter_title\\\": \\\"Catchy weekly title\\\",\\n  \\\"intro_paragraph\\\": \\\"Warm 2-sentence intro\\\",\\n  \\\"stories\\\": [\\n    {\\n      \\\"rank\\\": 1,\\n      \\\"title\\\": \\\"\\\",\\n      \\\"url\\\": \\\"\\\",\\n      \\\"why_it_matters\\\": \\\"2 sentences max — why this matters to our audience\\\",\\n      \\\"key_takeaway\\\": \\\"One actionable insight\\\"\\n    }\\n  ],\\n  \\\"closing_thought\\\": \\\"Inspiring 1-sentence closer\\\",\\n  \\\"email_subject_lines\\\": [\\\"3 A/B test subject line options\\\"]\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Claude Curates Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json.content[0].text;\nlet digest;\ntry {\n  digest = JSON.parse(raw);\n} catch (e) {\n  const m = raw.match(/\\{[\\s\\S]*\\}/);\n  try { digest = JSON.parse(m[0]); } catch { digest = { newsletter_title: 'Weekly Digest', intro_paragraph: '', stories: [], closing_thought: '', email_subject_lines: [] }; }\n}\n\n// Build plain-text newsletter\nconst stories = (digest.stories || []).map(s => \n  `${s.rank}. ${s.title}\\n${s.url}\\n→ ${s.why_it_matters}\\nTakeaway: ${s.key_takeaway}`\n).join('\\n\\n');\n\nconst plainText = `${digest.newsletter_title}\\n\\n${digest.intro_paragraph}\\n\\n${stories}\\n\\n${digest.closing_thought}`;\n\nreturn [{ json: { ...digest, plain_text: plainText, generated_at: new Date().toISOString() } }];"
+      },
+      "id": "code-002",
+      "name": "Build Newsletter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1620, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\"type\": \"header\", \"text\": {\"type\": \"plain_text\", \"text\": \"📧 {{ $json.newsletter_title }} — Ready to Send\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Stories curated:* {{ $json.stories.length }}\\n*Generated:* {{ $json.generated_at }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Subject line options:*\\n{{ $json.email_subject_lines.map((s,i) => (i+1)+'. '+s).join('\\n') }}\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Top 3 stories:*\\n{{ $json.stories.slice(0,3).map(s => `• *${s.title}* — ${s.why_it_matters}`).join('\\n') }}\"}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "Preview in Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1840, 80]
+    }
+  ],
+  "connections": {
+    "Weekly Schedule — Monday 8am": {
+      "main": [[{"node": "Newsletter Config — Edit This", "type": "main", "index": 0}]]
+    },
+    "Newsletter Config — Edit This": {
+      "main": [[{"node": "Split Feeds", "type": "main", "index": 0}]]
+    },
+    "Split Feeds": {
+      "main": [[{"node": "Fetch RSS Feed", "type": "main", "index": 0}]]
+    },
+    "Fetch RSS Feed": {
+      "main": [[{"node": "Aggregate All Articles", "type": "main", "index": 0}]]
+    },
+    "Aggregate All Articles": {
+      "main": [[{"node": "Prepare Articles for Claude", "type": "main", "index": 0}]]
+    },
+    "Prepare Articles for Claude": {
+      "main": [[{"node": "Claude Curates Digest", "type": "main", "index": 0}]]
+    },
+    "Claude Curates Digest": {
+      "main": [[{"node": "Build Newsletter", "type": "main", "index": 0}]]
+    },
+    "Build Newsletter": {
+      "main": [[{"node": "Preview in Slack", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "content"}, {"name": "newsletter"}, {"name": "flowmindlabs"}]
+}
