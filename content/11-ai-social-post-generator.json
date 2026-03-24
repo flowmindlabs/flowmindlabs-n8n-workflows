@@ -1,0 +1,203 @@
+{
+  "name": "Content — AI Social Post Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 📱 AI Social Post Generator\n\n**What this workflow does:**\nTakes a topic, URL, or blog post content and generates optimized social posts for LinkedIn, Twitter/X, and Instagram simultaneously. Uses Claude to match each platform's tone and format.\n\n**Setup steps:**\n1. Trigger via webhook POST or use the Manual Trigger for testing\n2. Add Claude API credentials\n3. Optional: Add LinkedIn/Twitter API credentials to auto-post\n4. Set your brand voice in the `Brand Config` node\n\n**Payload format:**\n```json\n{\n  \"topic\": \"How AI automation saves 10 hours/week for small teams\",\n  \"url\": \"https://yourblog.com/post-url\",\n  \"content\": \"Optional: paste article content directly\",\n  \"tone\": \"professional|casual|technical|inspirational\",\n  \"include_hashtags\": true,\n  \"include_emoji\": true\n}\n```",
+        "height": 400,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -240]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "social-posts",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "Generate Social Posts",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 80],
+      "webhookId": "social-post-generator"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "brand_name",
+              "value": "FlowMind Labs",
+              "type": "string"
+            },
+            {
+              "id": "b2",
+              "name": "brand_voice",
+              "value": "Innovative, approachable, technically credible. We make AI automation accessible to every team.",
+              "type": "string"
+            },
+            {
+              "id": "b3",
+              "name": "brand_hashtags",
+              "value": "#AIAutomation #n8n #FlowMindLabs #NoCode #AITools",
+              "type": "string"
+            },
+            {
+              "id": "b4",
+              "name": "linkedin_author",
+              "value": "Your Name — Founder at FlowMind Labs",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-001",
+      "name": "Brand Config — Edit This",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "topic",
+              "value": "={{ $('Generate Social Posts').item.json.body?.topic || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "content",
+              "value": "={{ $('Generate Social Posts').item.json.body?.content || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "c3",
+              "name": "url",
+              "value": "={{ $('Generate Social Posts').item.json.body?.url || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "c4",
+              "name": "tone",
+              "value": "={{ $('Generate Social Posts').item.json.body?.tone || 'professional' }}",
+              "type": "string"
+            },
+            {
+              "id": "c5",
+              "name": "include_emoji",
+              "value": "={{ $('Generate Social Posts').item.json.body?.include_emoji !== false }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-002",
+      "name": "Extract Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [520, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 1500,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"You are a social media expert for {{ $('Brand Config — Edit This').item.json.brand_name }}.\\n\\nBrand Voice: {{ $('Brand Config — Edit This').item.json.brand_voice }}\\nTone: {{ $json.tone }}\\nEmojis: {{ $json.include_emoji ? 'yes' : 'no' }}\\n\\nTopic/Content to post about:\\n{{ $json.topic || $json.content }}\\n{{ $json.url ? 'Reference URL: ' + $json.url : '' }}\\n\\nGenerate 3 platform-specific posts and return JSON:\\n{\\n  \\\"linkedin\\\": {\\n    \\\"post\\\": \\\"LinkedIn post (max 1300 chars, professional, can have line breaks, storytelling format)\\\",\\n    \\\"hashtags\\\": \\\"5-8 relevant hashtags\\\",\\n    \\\"char_count\\\": 0\\n  },\\n  \\\"twitter\\\": {\\n    \\\"post\\\": \\\"Tweet (max 280 chars, punchy, hook in first 5 words)\\\",\\n    \\\"hashtags\\\": \\\"2-3 hashtags only\\\",\\n    \\\"thread\\\": [\\\"Optional thread items if needed\\\"]\\n  },\\n  \\\"instagram\\\": {\\n    \\\"caption\\\": \\\"Instagram caption (conversational, storytelling, max 2200 chars)\\\",\\n    \\\"hashtags\\\": \\\"15-20 relevant hashtags\\\",\\n    \\\"hook\\\": \\\"First line that stops the scroll\\\"\\n  },\\n  \\\"best_time_to_post\\\": \\\"IST timezone recommendation\\\"\"\n  }]\n}",
+        "options": {}
+      },
+      "id": "http-001",
+      "name": "Claude Writes Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CLAUDE_CRED_ID",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json.content[0].text;\nlet posts;\ntry {\n  posts = JSON.parse(raw);\n} catch (e) {\n  const m = raw.match(/\\{[\\s\\S]*\\}/);\n  try { posts = JSON.parse(m[0]); } catch { posts = { linkedin: { post: raw, hashtags: '', char_count: 0 }, twitter: { post: raw.substring(0, 280), hashtags: '' }, instagram: { caption: raw, hashtags: '', hook: '' }, best_time_to_post: '9am IST' }; }\n}\nreturn [{ json: { ...posts, generated_at: new Date().toISOString() } }];"
+      },
+      "id": "code-001",
+      "name": "Parse Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\"type\": \"header\", \"text\": {\"type\": \"plain_text\", \"text\": \"📱 Social Posts Ready — Review & Post\"}},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Best Time to Post:* {{ $json.best_time_to_post }}\"}},\n    {\"type\": \"divider\"},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*🔵 LinkedIn:*\\n{{ $json.linkedin.post }}\\n\\n{{ $json.linkedin.hashtags }}\"}},\n    {\"type\": \"divider\"},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*🐦 Twitter/X:*\\n{{ $json.twitter.post }}\\n{{ $json.twitter.hashtags }}\"}},\n    {\"type\": \"divider\"},\n    {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*📸 Instagram Hook:*\\n{{ $json.instagram.hook }}\"}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "http-002",
+      "name": "Send to Slack for Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($('Parse Posts').item.json) }}",
+        "options": {}
+      },
+      "id": "respond-001",
+      "name": "Return All Posts",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1400, 80]
+    }
+  ],
+  "connections": {
+    "Generate Social Posts": {
+      "main": [[{"node": "Brand Config — Edit This", "type": "main", "index": 0}]]
+    },
+    "Brand Config — Edit This": {
+      "main": [[{"node": "Extract Input", "type": "main", "index": 0}]]
+    },
+    "Extract Input": {
+      "main": [[{"node": "Claude Writes Posts", "type": "main", "index": 0}]]
+    },
+    "Claude Writes Posts": {
+      "main": [[{"node": "Parse Posts", "type": "main", "index": 0}]]
+    },
+    "Parse Posts": {
+      "main": [[{"node": "Send to Slack for Review", "type": "main", "index": 0}]]
+    },
+    "Send to Slack for Review": {
+      "main": [[{"node": "Return All Posts", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"templateCredsSetupCompleted": false, "instanceId": "flowmindlabs"},
+  "tags": [{"name": "content"}, {"name": "social-media"}, {"name": "flowmindlabs"}]
+}
