@@ -369,4 +369,12 @@ sudo certbot renew --force-renewal
 
 ---
 
+## References
+
+- [Hostinger — How to Install OpenClaw on VPS](https://www.hostinger.com/support/how-to-install-openclaw-on-hostinger-vps/)
+- [OpenClaw GitHub](https://github.com/openclaw/openclaw)
+- [Emergent.sh MoltBot Tutorial](https://emergent.sh/tutorial/moltbot-on-emergent)
+
+---
+
 *Built by FlowMind Labs — flowmindlabs.co | contact.flowmindlabs@gmail.com*
