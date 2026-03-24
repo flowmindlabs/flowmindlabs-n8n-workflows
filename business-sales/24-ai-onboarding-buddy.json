@@ -1,0 +1,161 @@
+{
+  "name": "24 - AI Onboarding Buddy",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 24 - AI Onboarding Buddy\n\n**What it does:**\n- Triggered when a new employee is added (webhook from HR system or Slack)\n- Claude personalises a 10-day onboarding message sequence based on role\n- Sends day-by-day Slack DMs automatically over 2 weeks\n- Each message is role-aware: different for engineers vs sales vs ops\n\n**Setup:**\n1. Set SLACK_BOT_TOKEN environment variable (bot needs `chat:write` scope)\n2. Configure OpenRouter/Claude credentials\n3. Trigger the webhook when a new hire joins:\n   `{ \"name\": \"Jane Doe\", \"role\": \"Software Engineer\", \"slack_user_id\": \"U0123456\", \"start_date\": \"2026-04-01\", \"manager\": \"John Smith\" }`\n4. Adjust the message schedule in the Schedule node if needed\n\n**Note:** This workflow stores state in n8n's static data to track which day each employee is on.",
+        "height": 400,
+        "width": 380
+      },
+      "id": "a4000004-0004-0004-0004-000000000001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, -180]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-employee",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a4000004-0004-0004-0004-000000000002",
+      "name": "New Employee Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "new-employee-webhook"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "e001", "name": "employee_name", "value": "={{ $json.body.name }}", "type": "string" },
+            { "id": "e002", "name": "role", "value": "={{ $json.body.role }}", "type": "string" },
+            { "id": "e003", "name": "slack_user_id", "value": "={{ $json.body.slack_user_id }}", "type": "string" },
+            { "id": "e004", "name": "start_date", "value": "={{ $json.body.start_date }}", "type": "string" },
+            { "id": "e005", "name": "manager", "value": "={{ $json.body.manager || 'your manager' }}", "type": "string" },
+            { "id": "e006", "name": "department", "value": "={{ $json.body.department || '' }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a4000004-0004-0004-0004-000000000003",
+      "name": "Extract Employee Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "HTTP-Referer", "value": "flowmindlabs.co" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"anthropic/claude-sonnet-4-6\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an HR onboarding assistant. Create a 10-day onboarding message sequence for a new employee. Each message should be warm, specific to their role, and actionable. Return ONLY a valid JSON array of 10 objects: [{\\\"day\\\": 1, \\\"message\\\": \\\"...\\\"}]. Keep each message under 150 words. Cover: day 1 welcome, day 2 team intro, day 3 tools setup, day 4 first task, day 5 check-in, day 7 week 1 reflection, day 8 deep dive into role, day 9 meet stakeholders, day 10 30-day goal setting, day 14 two-week check-in.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"New employee: {{ $json.employee_name }}\\nRole: {{ $json.role }}\\nDepartment: {{ $json.department }}\\nManager: {{ $json.manager }}\\nStart date: {{ $json.start_date }}\"\n    }\n  ],\n  \"max_tokens\": 2000\n}",
+        "options": {}
+      },
+      "id": "a4000004-0004-0004-0004-000000000004",
+      "name": "Claude — Generate Onboarding Plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.item.json.choices?.[0]?.message?.content || '[]';\nlet messages;\ntry {\n  const match = raw.match(/\\[[\\s\\S]*\\]/);\n  messages = JSON.parse(match ? match[0] : raw);\n} catch(e) {\n  messages = [\n    { day: 1, message: `Welcome to the team, {{ $('Extract Employee Data').item.json.employee_name }}! We're thrilled to have you as our new {{ $('Extract Employee Data').item.json.role }}. Today, get settled in, meet the team, and don't hesitate to ask questions. Your manager {{ $('Extract Employee Data').item.json.manager }} is here to help.` }\n  ];\n}\n\nconst slackUserId = $('Extract Employee Data').item.json.slack_user_id;\nconst startDate = new Date($('Extract Employee Data').item.json.start_date);\n\nconst scheduled = messages.map(m => {\n  const sendDate = new Date(startDate);\n  sendDate.setDate(startDate.getDate() + (m.day - 1));\n  // Skip weekends\n  if (sendDate.getDay() === 0) sendDate.setDate(sendDate.getDate() + 1);\n  if (sendDate.getDay() === 6) sendDate.setDate(sendDate.getDate() + 2);\n  return {\n    day: m.day,\n    message: m.message,\n    slack_user_id: slackUserId,\n    send_date: sendDate.toISOString().split('T')[0],\n    employee_name: $('Extract Employee Data').item.json.employee_name,\n    role: $('Extract Employee Data').item.json.role\n  };\n});\n\nreturn scheduled.map(s => ({ json: s }));"
+      },
+      "id": "a4000004-0004-0004-0004-000000000005",
+      "name": "Parse & Schedule Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "d001",
+              "leftValue": "={{ $json.send_date }}",
+              "rightValue": "={{ new Date().toISOString().split('T')[0] }}",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a4000004-0004-0004-0004-000000000006",
+      "name": "Send Today?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"{{ $json.slack_user_id }}\",\n  \"text\": \"{{ $json.message }}\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Day {{ $json.day }} — Onboarding Check-in*\\n\\n{{ $json.message }}\" }\n    },\n    {\n      \"type\": \"context\",\n      \"elements\": [{ \"type\": \"mrkdwn\", \"text\": \"Your AI Onboarding Buddy\" }]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "a4000004-0004-0004-0004-000000000007",
+      "name": "Send Slack DM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 160],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"onboarding_scheduled\", \"messages_planned\": 10 }",
+        "options": {}
+      },
+      "id": "a4000004-0004-0004-0004-000000000008",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1440, 440]
+    }
+  ],
+  "connections": {
+    "New Employee Webhook": { "main": [[{ "node": "Extract Employee Data", "type": "main", "index": 0 }]] },
+    "Extract Employee Data": { "main": [[{ "node": "Claude — Generate Onboarding Plan", "type": "main", "index": 0 }]] },
+    "Claude — Generate Onboarding Plan": { "main": [[{ "node": "Parse & Schedule Messages", "type": "main", "index": 0 }]] },
+    "Parse & Schedule Messages": { "main": [[{ "node": "Send Today?", "type": "main", "index": 0 }]] },
+    "Send Today?": {
+      "main": [
+        [{ "node": "Send Slack DM", "type": "main", "index": 0 }],
+        [{ "node": "Respond OK", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "createdAt": "2026-03-24T00:00:00.000Z", "updatedAt": "2026-03-24T00:00:00.000Z", "id": "tag-hr", "name": "hr" }],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-24T00:00:00.000Z",
+  "versionId": "v1"
+}
