@@ -128,10 +128,10 @@ Full setup guide: [guides/16-openclaw-vps-setup-guide.md](guides/16-openclaw-vps
 
 | Service | Price |
 |---------|-------|
-| Workflow customization | From $99 |
-| Full automation setup (3 workflows) | $299 |
-| Monthly managed automation | From $599/month |
-| White-label automation platform | From $1,200/month |
+| Workflow customization | From ₹2,999 |
+| Full automation setup (3 workflows) | ₹7,999 |
+| Monthly managed automation | From ₹9,999/month |
+| White-label automation platform | From ₹19,999/month |
 
 → Email: contact@flowmindlabs.co
 → Website: flowmindlabs.co
