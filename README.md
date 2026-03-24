@@ -66,7 +66,7 @@
 | # | Guide | Description |
 |---|-------|-------------|
 | 16 | [OpenClaw VPS Setup](guides/16-openclaw-vps-setup-guide.md) | Complete guide: Hetzner VPS → Ubuntu → OpenClaw → Nginx → SSL → systemd |
-| 17 | [Automations into a SaaS](guides/17-turning-automations-into-saas-guide.md) | How to turn these workflows into recurring revenue — 4 models, 90-day plan |
+| 17 | [Automation Services](guides/automation-services.md) | What FlowMind Labs does for you — packages, INR pricing, how to get started |
 
 ---
 
