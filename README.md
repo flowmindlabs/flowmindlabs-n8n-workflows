@@ -91,6 +91,7 @@
 | 16 | [OpenClaw VPS Setup](guides/16-openclaw-vps-setup-guide.md) | Complete guide: Hostinger VPS → Ubuntu → OpenClaw → Nginx → SSL → systemd |
 | 17 | [Automation Services](guides/automation-services.md) | What FlowMind Labs does for you — packages, INR pricing, how to get started |
 | 18 | [OpenClaw Security Guide](guides/openclaw-security.md) | Mandatory reading before deploying OpenClaw — risks, SOUL.md policies, what never to connect |
+| 19 | [Client Security Agreement](guides/client-security-agreement.md) | 1-page agreement covering data ownership, credential security, WhatsApp compliance, liability |
 
 ---
 
