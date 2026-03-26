@@ -1,0 +1,367 @@
+{
+  "name": "30 - WhatsApp Booking Agent (Chakra Chat)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WhatsApp Booking Agent\n**BSP:** Chakra Chat (₹0–₹999/month)\n**Target:** Clinics, salons, restaurants\n**Flow:** Customer messages WhatsApp → AI understands intent → books appointment → confirms\n\n**Setup:**\n1. Set Chakra Chat webhook URL to this workflow's webhook\n2. Set CHAKRA_API_KEY + CHAKRA_PHONE_ID in n8n credentials\n3. Update BUSINESS_CONFIG node with your client's details",
+        "height": 220,
+        "width": 420
+      },
+      "id": "sticky-1",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-booking",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Chakra Chat Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "webhookId": "whatsapp-booking-agent"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "customerPhone",
+              "value": "={{ $json.body.from || $json.from }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "customerMessage",
+              "value": "={{ $json.body.text?.body || $json.body.message || $json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "messageId",
+              "value": "={{ $json.body.id || $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-1",
+      "name": "Extract Message Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "businessName",
+              "value": "Ravi's Restaurant",
+              "type": "string"
+            },
+            {
+              "id": "b2",
+              "name": "businessType",
+              "value": "restaurant",
+              "type": "string"
+            },
+            {
+              "id": "b3",
+              "name": "openingHours",
+              "value": "Monday to Sunday, 12pm to 11pm",
+              "type": "string"
+            },
+            {
+              "id": "b4",
+              "name": "services",
+              "value": "Table bookings for 1-10 guests. We serve North Indian, South Indian and Chinese cuisine. Free parking available.",
+              "type": "string"
+            },
+            {
+              "id": "b5",
+              "name": "bookingRules",
+              "value": "Bookings accepted for same day and up to 30 days in advance. Minimum 1 hour notice required. Cancellations accepted up to 2 hours before.",
+              "type": "string"
+            },
+            {
+              "id": "b6",
+              "name": "calendarId",
+              "value": "bookings@ravistaurant.com",
+              "type": "string"
+            },
+            {
+              "id": "b7",
+              "name": "ownerPhone",
+              "value": "+919999999999",
+              "type": "string"
+            },
+            {
+              "id": "b8",
+              "name": "airtableBase",
+              "value": "appXXXXXXXXXXXXXX",
+              "type": "string"
+            },
+            {
+              "id": "b9",
+              "name": "airtableTable",
+              "value": "Bookings",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config-1",
+      "name": "BUSINESS_CONFIG",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"anthropic/claude-3-5-haiku\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a friendly booking assistant for {{ $('BUSINESS_CONFIG').item.json.businessName }}, a {{ $('BUSINESS_CONFIG').item.json.businessType }}.\\n\\nBusiness details:\\n- Hours: {{ $('BUSINESS_CONFIG').item.json.openingHours }}\\n- Services: {{ $('BUSINESS_CONFIG').item.json.services }}\\n- Booking rules: {{ $('BUSINESS_CONFIG').item.json.bookingRules }}\\n\\nToday is {{ new Date().toLocaleDateString('en-IN', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'}) }}.\\n\\nYour job:\\n1. Understand what the customer wants\\n2. If they want to book: collect date, time, number of guests, name\\n3. If you have all details: respond with JSON block: {\\\"action\\\": \\\"BOOK\\\", \\\"date\\\": \\\"YYYY-MM-DD\\\", \\\"time\\\": \\\"HH:MM\\\", \\\"guests\\\": N, \\\"name\\\": \\\"Name\\\"}\\n4. If asking a question: answer helpfully\\n5. If cancelling: respond with JSON: {\\\"action\\\": \\\"CANCEL\\\", \\\"details\\\": \\\"...\\\"}\\n6. Keep responses short, warm, under 3 sentences. Use simple English or Hindi mix if customer uses Hindi.\\n\\nIMPORTANT: Only output the JSON block when you have ALL booking details confirmed.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $('Extract Message Data').item.json.customerMessage }}\"\n    }\n  ],\n  \"max_tokens\": 300\n}",
+        "options": {}
+      },
+      "id": "claude-1",
+      "name": "Claude - Understand Intent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openrouter-api",
+          "name": "OpenRouter API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "aiReply",
+              "value": "={{ $json.choices[0].message.content }}",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "isBookingAction",
+              "value": "={{ $json.choices[0].message.content.includes('\"action\": \"BOOK\"') }}",
+              "type": "boolean"
+            },
+            {
+              "id": "c3",
+              "name": "isCancelAction",
+              "value": "={{ $json.choices[0].message.content.includes('\"action\": \"CANCEL\"') }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "parse-1",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1140, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.isBookingAction }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-booking",
+      "name": "Is Booking Action?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const reply = $('Parse AI Response').item.json.aiReply;\nconst jsonMatch = reply.match(/\\{[^}]+\\}/s);\nif (!jsonMatch) throw new Error('No JSON found in AI reply');\nconst booking = JSON.parse(jsonMatch[0]);\nreturn [{ json: {\n  action: booking.action,\n  date: booking.date,\n  time: booking.time,\n  guests: booking.guests,\n  customerName: booking.name,\n  customerPhone: $('Extract Message Data').item.json.customerPhone,\n  businessName: $('BUSINESS_CONFIG').item.json.businessName,\n  confirmationMsg: `Booking confirmed! Table for ${booking.guests} on ${booking.date} at ${booking.time}. See you at ${$('BUSINESS_CONFIG').item.json.businessName}! Reply CANCEL to cancel.`\n}}];"
+      },
+      "id": "extract-booking",
+      "name": "Extract Booking Details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1580, 200]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "={{ $('BUSINESS_CONFIG').item.json.airtableBase }}",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "={{ $('BUSINESS_CONFIG').item.json.airtableTable }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Customer Name": "={{ $json.customerName }}",
+            "Phone": "={{ $json.customerPhone }}",
+            "Date": "={{ $json.date }}",
+            "Time": "={{ $json.time }}",
+            "Guests": "={{ $json.guests }}",
+            "Status": "Confirmed",
+            "Business": "={{ $json.businessName }}",
+            "Created At": "={{ new Date().toISOString() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "airtable-1",
+      "name": "Log Booking to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1800, 200],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "airtable-token",
+          "name": "Airtable API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.chakra.chat/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{ $('Extract Message Data').item.json.customerPhone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $('Extract Booking Details').item.json.confirmationMsg }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "send-confirm",
+      "name": "Send Booking Confirmation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2020, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "chakra-chat-api",
+          "name": "Chakra Chat API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.chakra.chat/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{ $('Extract Message Data').item.json.customerPhone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $('Parse AI Response').item.json.aiReply.replace(/\\{[^}]+\\}/s, '').trim() || $('Parse AI Response').item.json.aiReply }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "send-reply",
+      "name": "Send Conversational Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 420],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "chakra-chat-api",
+          "name": "Chakra Chat API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"ok\" }",
+        "options": {}
+      },
+      "id": "respond-1",
+      "name": "Respond 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2240, 300]
+    }
+  ],
+  "connections": {
+    "Chakra Chat Webhook": {
+      "main": [[{ "node": "Extract Message Data", "type": "main", "index": 0 }]]
+    },
+    "Extract Message Data": {
+      "main": [[{ "node": "BUSINESS_CONFIG", "type": "main", "index": 0 }]]
+    },
+    "BUSINESS_CONFIG": {
+      "main": [[{ "node": "Claude - Understand Intent", "type": "main", "index": 0 }]]
+    },
+    "Claude - Understand Intent": {
+      "main": [[{ "node": "Parse AI Response", "type": "main", "index": 0 }]]
+    },
+    "Parse AI Response": {
+      "main": [[{ "node": "Is Booking Action?", "type": "main", "index": 0 }]]
+    },
+    "Is Booking Action?": {
+      "main": [
+        [{ "node": "Extract Booking Details", "type": "main", "index": 0 }],
+        [{ "node": "Send Conversational Reply", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Booking Details": {
+      "main": [[{ "node": "Log Booking to Airtable", "type": "main", "index": 0 }]]
+    },
+    "Log Booking to Airtable": {
+      "main": [[{ "node": "Send Booking Confirmation", "type": "main", "index": 0 }]]
+    },
+    "Send Booking Confirmation": {
+      "main": [[{ "node": "Respond 200 OK", "type": "main", "index": 0 }]]
+    },
+    "Send Conversational Reply": {
+      "main": [[{ "node": "Respond 200 OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": ["whatsapp", "booking", "chakra-chat", "flowmindlabs"],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-26T00:00:00.000Z",
+  "versionId": "1"
+}

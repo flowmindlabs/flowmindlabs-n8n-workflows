@@ -1,0 +1,327 @@
+{
+  "name": "32 - WhatsApp FAQ + Support Agent (Chakra Chat)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WhatsApp FAQ + Support Agent\n**BSP:** Chakra Chat (₹0–₹999/month)\n**Target:** Any SMB — retail, services, schools, clinics\n**Flow:** Customer asks question → AI answers from knowledge base → escalates to human if needed\n\n**Setup:**\n1. Set Chakra Chat webhook to this workflow's webhook URL\n2. Add CHAKRA_API_KEY in n8n credentials\n3. Update FAQ_CONFIG node — add your client's full FAQ list\n4. Update ownerPhone for human escalation\n\n**Escalation trigger words:** 'human', 'agent', 'complaint', 'refund', 'manager'",
+        "height": 260,
+        "width": 480
+      },
+      "id": "sticky-1",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-faq",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Chakra Chat Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "webhookId": "whatsapp-faq-agent"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "customerPhone",
+              "value": "={{ $json.body.from || $json.from }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "customerMessage",
+              "value": "={{ $json.body.text?.body || $json.body.message || $json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "customerName",
+              "value": "={{ $json.body.name || $json.name || 'Customer' }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "needsHuman",
+              "value": "={{ ['human', 'agent', 'complaint', 'refund', 'manager', 'speak to someone', 'call me'].some(w => ($json.body.text?.body || $json.body.message || '').toLowerCase().includes(w)) }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-1",
+      "name": "Extract Message Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "businessName",
+              "value": "QuickMart",
+              "type": "string"
+            },
+            {
+              "id": "b2",
+              "name": "businessType",
+              "value": "retail store",
+              "type": "string"
+            },
+            {
+              "id": "b3",
+              "name": "knowledgeBase",
+              "value": "STORE INFORMATION:\n- Store hours: Monday to Saturday 9am to 9pm, Sunday 10am to 7pm\n- Location: 42 MG Road, Bangalore 560001\n- Phone: +91 80 4567 8900\n- Email: support@quickmart.in\n\nORDERS & DELIVERY:\n- Online orders: quickmart.in\n- Delivery available within 10km radius\n- Delivery time: 2-4 hours same day, next day for orders after 6pm\n- Minimum order: ₹299\n- Free delivery above ₹799\n- Delivery charge: ₹49 below ₹799\n\nPAYMENT:\n- We accept: Cash, UPI, Credit/Debit cards, NetBanking\n- EMI available on orders above ₹3,000 (HDFC/ICICI/Kotak cards)\n- No COD for orders above ₹5,000\n\nRETURNS & REFUNDS:\n- Return window: 7 days for most items\n- Non-returnable: Fresh produce, personal care, inner wear\n- Refund processed in 3-5 business days to original payment method\n- To return: WhatsApp a photo of the item with bill\n\nOFFERS & DISCOUNTS:\n- Weekend offers every Saturday and Sunday\n- Loyalty program: 1 point per ₹10 spent, redeem at 100 points = ₹10 off\n- New user discount: 15% off first order with code FIRST15\n\nPRODUCTS:\n- Groceries, dairy, fresh produce, snacks, personal care, home essentials\n- Over 5,000 products in store, 2,000+ available online",
+              "type": "string"
+            },
+            {
+              "id": "b4",
+              "name": "ownerPhone",
+              "value": "+919777777777",
+              "type": "string"
+            },
+            {
+              "id": "b5",
+              "name": "ownerName",
+              "value": "Priya",
+              "type": "string"
+            },
+            {
+              "id": "b6",
+              "name": "escalationMessage",
+              "value": "I understand you need personal assistance. I'm connecting you with our team right away. You'll hear from us within 15 minutes. Our support hours are 9am to 9pm. 🙏",
+              "type": "string"
+            },
+            {
+              "id": "b7",
+              "name": "airtableBase",
+              "value": "appXXXXXXXXXXXXXX",
+              "type": "string"
+            },
+            {
+              "id": "b8",
+              "name": "airtableTable",
+              "value": "Support_Tickets",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config-1",
+      "name": "FAQ_CONFIG",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 520]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.needsHuman }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "if-human",
+      "name": "Needs Human?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "={{ $('FAQ_CONFIG').item.json.airtableBase }}",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "={{ $('FAQ_CONFIG').item.json.airtableTable }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Customer Phone": "={{ $('Extract Message Data').item.json.customerPhone }}",
+            "Customer Name": "={{ $('Extract Message Data').item.json.customerName }}",
+            "Issue": "={{ $('Extract Message Data').item.json.customerMessage }}",
+            "Status": "Open",
+            "Priority": "High",
+            "Source": "WhatsApp",
+            "Created At": "={{ new Date().toISOString() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "create-ticket",
+      "name": "Create Support Ticket",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1140, 180],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "airtable-token",
+          "name": "Airtable API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.chakra.chat/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{ $('FAQ_CONFIG').item.json.ownerPhone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"🚨 Customer needs human support\\nName: {{ $('Extract Message Data').item.json.customerName }}\\nPhone: {{ $('Extract Message Data').item.json.customerPhone }}\\nMessage: {{ $('Extract Message Data').item.json.customerMessage }}\\n\\nPlease respond within 15 minutes.\"\n  }\n}",
+        "options": {}
+      },
+      "id": "alert-owner",
+      "name": "Alert Owner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 140],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "chakra-chat-api",
+          "name": "Chakra Chat API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.chakra.chat/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{ $('Extract Message Data').item.json.customerPhone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $('FAQ_CONFIG').item.json.escalationMessage }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "send-escalation",
+      "name": "Send Escalation Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"anthropic/claude-3-5-haiku\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful customer support assistant for {{ $('FAQ_CONFIG').item.json.businessName }}, a {{ $('FAQ_CONFIG').item.json.businessType }}.\\n\\nKnowledge base:\\n{{ $('FAQ_CONFIG').item.json.knowledgeBase }}\\n\\nRules:\\n- Answer only from the knowledge base above\\n- If the answer is not in the knowledge base, say: 'I don't have that information right now. Please call us at +91 80 4567 8900 or visit our store.'\\n- Keep answers short — max 3 sentences\\n- Be warm and helpful\\n- Use simple English. If customer writes in Hindi, reply in Hindi\\n- Never make up information\\n- End with a follow-up question if relevant: 'Is there anything else I can help you with?'\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $('Extract Message Data').item.json.customerMessage }}\"\n    }\n  ],\n  \"max_tokens\": 250\n}",
+        "options": {}
+      },
+      "id": "claude-1",
+      "name": "Claude - Answer FAQ",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1140, 440],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openrouter-api",
+          "name": "OpenRouter API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.chakra.chat/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{ $('Extract Message Data').item.json.customerPhone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.choices[0].message.content }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "send-answer",
+      "name": "Send FAQ Answer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 440],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "chakra-chat-api",
+          "name": "Chakra Chat API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"ok\" }",
+        "options": {}
+      },
+      "id": "respond-1",
+      "name": "Respond 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1580, 300]
+    }
+  ],
+  "connections": {
+    "Chakra Chat Webhook": {
+      "main": [[{ "node": "Extract Message Data", "type": "main", "index": 0 }]]
+    },
+    "Extract Message Data": {
+      "main": [[{ "node": "FAQ_CONFIG", "type": "main", "index": 0 }]]
+    },
+    "FAQ_CONFIG": {
+      "main": [[{ "node": "Needs Human?", "type": "main", "index": 0 }]]
+    },
+    "Needs Human?": {
+      "main": [
+        [{ "node": "Create Support Ticket", "type": "main", "index": 0 }],
+        [{ "node": "Claude - Answer FAQ", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Support Ticket": {
+      "main": [[{ "node": "Alert Owner", "type": "main", "index": 0 }]]
+    },
+    "Alert Owner": {
+      "main": [[{ "node": "Send Escalation Message", "type": "main", "index": 0 }]]
+    },
+    "Send Escalation Message": {
+      "main": [[{ "node": "Respond 200 OK", "type": "main", "index": 0 }]]
+    },
+    "Claude - Answer FAQ": {
+      "main": [[{ "node": "Send FAQ Answer", "type": "main", "index": 0 }]]
+    },
+    "Send FAQ Answer": {
+      "main": [[{ "node": "Respond 200 OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": ["whatsapp", "faq", "support", "chakra-chat", "flowmindlabs"],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-26T00:00:00.000Z",
+  "versionId": "1"
+}

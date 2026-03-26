@@ -2,7 +2,7 @@
 
 **Production-ready AI automation workflows built by [FlowMind Labs](https://flowmindlabs.com)**
 
-> 30 high-value workflows across AI Ops, Call Center, Business, Content, and OpenClaw — all powered by Claude AI.
+> 33 high-value workflows across AI Ops, Call Center, Business, Content, OpenClaw, and WhatsApp Agents — all powered by Claude AI.
 
 ---
 
@@ -74,6 +74,16 @@
 | 28 | [AWS Cost Monitor](openclaw/28-openclaw-aws-cost-monitor.json) | Weekly AWS Cost Explorer pull → Claude analyses spend trends → Slack cost report |
 | 29 | [Competitive Intelligence Monitor](openclaw/29-competitive-intelligence-monitor.json) | Daily competitor page scrape → Claude detects pricing/feature changes → Slack alert |
 
+### 📱 WhatsApp Agents (FlowMind Labs — India-first)
+
+> Deploy these as managed services for Indian SMBs. Replace the `BUSINESS_CONFIG` / `FAQ_CONFIG` / `LEAD_CONFIG` node with your client's details and go live in 2 days.
+
+| # | Workflow | BSP | Target Client | What it Does |
+|---|----------|-----|---------------|-------------|
+| 30 | [WhatsApp Booking Agent](whatsapp-agents/30-whatsapp-booking-agent.json) | Chakra Chat (₹0–₹999) | Restaurants, salons, clinics | Customer messages → AI collects date/time/guests → confirms booking → logs to Airtable |
+| 31 | [WhatsApp Lead Capture Agent](whatsapp-agents/31-whatsapp-lead-capture-agent.json) | AiSensy (₹1,500) | Real estate, coaching, insurance | Prospect messages → AI qualifies (5 questions) → scores lead → alerts owner on WhatsApp |
+| 32 | [WhatsApp FAQ + Support Agent](whatsapp-agents/32-whatsapp-faq-support-agent.json) | Chakra Chat (₹0–₹999) | Any SMB | Customer asks questions → AI answers from knowledge base → escalates to human if needed |
+
 ### 📖 Guides
 
 | # | Guide | Description |
@@ -144,6 +154,24 @@ For RAG Company Docs Chatbot:
 ### Pinecone
 For RAG Company Docs Chatbot:
 1. Sign up at [pinecone.io](https://www.pinecone.io) → create an index
+
+### WhatsApp BSP — Chakra Chat
+For Workflow 30 (Booking) and 32 (FAQ + Support):
+1. Sign up at [chakra.chat](https://chakra.chat) — free tier available
+2. Apply for WhatsApp Business API access (requires a dedicated business number)
+3. Get API key from Chakra Chat dashboard
+4. In n8n: **Credentials** → New → **HTTP Header Auth** → Name: `Chakra Chat API` → Header: `Authorization` → Value: `Bearer <key>`
+5. Point Chakra Chat webhook to your n8n webhook URL
+
+### WhatsApp BSP — AiSensy
+For Workflow 31 (Lead Capture):
+1. Sign up at [aisensy.com](https://aisensy.com) — starting ₹1,500/month
+2. Apply for WhatsApp Business API access via AiSensy onboarding
+3. Get API key from AiSensy dashboard
+4. In n8n: **Credentials** → New → **HTTP Header Auth** → Name: `AiSensy API` → Header: `Authorization` → Value: `Bearer <key>`
+5. Create message templates in AiSensy: `lead_notification`, `lead_confirmation`, `lead_conversation`
+
+### Pinecone (continued)
 2. Index settings: **Dimensions: 1536**, **Metric: cosine**
 3. Get API key from Pinecone dashboard
 4. Set environment variables in n8n:
