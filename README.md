@@ -209,7 +209,7 @@ Full setup guide: [guides/16-openclaw-vps-setup-guide.md](guides/16-openclaw-vps
 | Monthly managed automation | From ₹9,999/month |
 | White-label automation platform | From ₹19,999/month |
 
-→ Email: contact@flowmindlabs.co
+→ Email: hello@flowmindlabs.co
 → Website: flowmindlabs.co
 
 ---
