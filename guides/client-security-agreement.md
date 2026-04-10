@@ -109,4 +109,4 @@ By proceeding with onboarding and payment, the Client acknowledges they have rea
 
 ---
 
-*For questions about this agreement, contact: contact@flowmindlabs.co*
+*For questions about this agreement, contact: hello@flowmindlabs.co*
